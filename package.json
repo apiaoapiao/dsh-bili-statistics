@@ -1,0 +1,30 @@
+{
+  "name": "@local/dsh-bili-statistics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "B 站观看统计：拉取观看历史、计算统计事实、对照意图档案生成带证据的偏离假设，并可私信推送到自己的另一个账号。",
+  "type": "module",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "lib/**/*.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}

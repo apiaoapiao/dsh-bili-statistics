@@ -1,0 +1,9 @@
+# dsh-bili-statistics 的 bundle patch：插入 Host 插件行。
+# 配置项全部可在此处覆盖，用户的这一层会保留到升级之后。
+- insert:
+    - id: bili-statistics
+      name: '@local/dsh-bili-statistics'
+      config:
+        report:
+          save_local: true
+          format: markdown

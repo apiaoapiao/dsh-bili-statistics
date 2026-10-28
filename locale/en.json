@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "title": "Bilibili Intent Drift Mirror",
+    "description": "Pulls Bilibili watch history, computes behaviour shape and statistics, renders an evidence-anchored drift card, and can DM a summary to another account."
+  },
+  "card": {
+    "window": "Window",
+    "items": "items",
+    "shape": "Behaviour shape",
+    "confidence": "confidence",
+    "completion": "Mean completion",
+    "lateNight": "Late-night share",
+    "repeat": "Repeat-author share",
+    "chains": "Longest binge run",
+    "hypotheses": "Drift hypotheses",
+    "evidence": "Evidence",
+    "empty": "Not enough records in this window, or no clear pattern.",
+    "pending": "Fetching history and computing statistics…",
+    "factsOnly": "Statistics only: no hypotheses recorded yet.",
+    "footer": "Hard facts come from API fields; behaviour shape is inference without an origin field."
+  }
+}
