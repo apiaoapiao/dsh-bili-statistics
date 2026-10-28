@@ -2,7 +2,7 @@
   "name": "@local/dsh-bili-statistics",
   "version": "0.1.0",
   "private": true,
-  "description": "B 站观看统计：拉取观看历史、计算统计事实、对照意图档案生成带证据的偏离假设，并可私信推送到自己的另一个账号。",
+  "description": "B 站观看统计：拉取观看历史、算出观看状态，让模型照视频标题写概览与计划完成情况，并可私信或邮件推送到自己。",
   "type": "module",
   "exports": {
     ".": "./lib/index.js",

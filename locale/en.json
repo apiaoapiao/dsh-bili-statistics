@@ -1,22 +1,23 @@
 {
   "meta": {
-    "title": "Bilibili Intent Drift Mirror",
-    "description": "Pulls Bilibili watch history, computes behaviour shape and statistics, renders an evidence-anchored drift card, and can DM a summary to another account."
+    "title": "Bilibili watch statistics",
+    "description": "Pulls Bilibili watch history, computes viewing type and numbers, lets a model write an overview and behaviour hypotheses from the video titles, and can push them by DM or email."
   },
   "card": {
     "window": "Window",
     "items": "items",
-    "shape": "Behaviour shape",
-    "confidence": "confidence",
+    "shape": "Viewing type",
+    "confidence": "reliability",
     "completion": "Mean completion",
     "lateNight": "Late-night share",
     "repeat": "Repeat-author share",
-    "chains": "Longest binge run",
-    "hypotheses": "Drift hypotheses",
+    "chains": "Longest autoplay run",
+    "overview": "Overview",
+    "hypotheses": "Plan status",
     "evidence": "Evidence",
     "empty": "Not enough records in this window, or no clear pattern.",
     "pending": "Fetching history and computing statistics…",
-    "factsOnly": "Statistics only: no hypotheses recorded yet.",
-    "footer": "Hard facts come from API fields; behaviour shape is inference without an origin field."
+    "factsOnly": "Numbers only: the model gave no conclusions this time.",
+    "footer": "Numbers come from Bilibili; viewing type and whether you clicked are inference."
   }
 }
