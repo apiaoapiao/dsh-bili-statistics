@@ -4,8 +4,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveWindow, defaultCronFor, formatLocal, SCHEDULE_MODES, WINDOW_MODES } from '../lib/time.js';
-import { reportFileName } from '../lib/report.js';
+import { resolveWindow, defaultCronFor, formatLocal, SCHEDULE_MODES, WINDOW_MODES } from '../src/time.js';
+import { reportFileName } from '../src/report.js';
 
 const ZONE = 'Asia/Shanghai';
 const at = (iso) => Date.parse(iso);

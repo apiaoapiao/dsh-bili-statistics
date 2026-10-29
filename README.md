@@ -31,7 +31,7 @@ git clone https://github.com/apiaoapiao/dsh-bili-statistics.git
 dsh plugin --profile web add 'file:/path/to/dsh-bili-statistics' --offline
 ```
 
-包内自带默认配置，装好即可用。之后刷新 GUI 页面，工具、卡片与设置页就会出现。改过 `lib/*.js` 之后需要重启 `dsh web`，ESM 已缓存的旧实现不会热替换。
+包内自带默认配置，装好即可用。之后刷新 GUI 页面，工具、卡片与设置页就会出现。改过 `src/*.js` 之后需要重启 `dsh web`，ESM 已缓存的旧实现不会热替换。
 
 想改默认值，编辑 profile 的 `cordis.patch.yml`（字段见下方「配置」），或者直接用设置页——设置页写的是覆盖层，优先级更高。
 

@@ -84,8 +84,8 @@ function makeHarness(services = {}) {
   return { tools, logs, disposers, ctx };
 }
 
-const { apply } = await import('../lib/index.js');
-const { sendBiliDm } = await import('../lib/notify.js');
+const { apply } = await import('../src/index.js');
+const { sendBiliDm } = await import('../src/notify.js');
 
 function baseConfig(dir, overrides = {}) {
   return {
@@ -110,7 +110,7 @@ function boot(dir, overrides, services) {
 const main = boot(path.join(here, '.tmp-main'));
 
 test('注册九个工具且注入 tools', async () => {
-  const { apply: applyAgain, inject } = await import('../lib/index.js');
+  const { apply: applyAgain, inject } = await import('../src/index.js');
   assert.equal(typeof applyAgain, 'function');
   assert.deepEqual(inject, ['tools']);
   assert.deepEqual([...main.tools.keys()].sort(), [
@@ -780,7 +780,8 @@ test('模型只给思考过程或被截断时，报告降级并说明原因', as
   assert.match(String(report.polish_message), /max tokens/, '要告诉用户是 token 不够');
   assert.equal(report.shape_source, 'rule', '润色失败时退回规则标签');
   const markdown = fs.readFileSync(report.paths.find((item) => item.endsWith('.md')), 'utf8');
-  assert.match(markdown, /观看状态（推断）.*深夜滑屏/, '退回规则标签');
+  assert.match(markdown, /观看状态（推断）.*· 可信度/, '退回规则标签（规则五选一，随统计时段变化，不点名具体标签）');
+  assert.ok(!/深夜连刷推荐/.test(markdown), '润色失败时不该出现模型起的名字');
   assert.ok(!/## 概览/.test(markdown), '没有正文就不该写概览段');
   fs.rmSync(dir, { recursive: true, force: true });
 

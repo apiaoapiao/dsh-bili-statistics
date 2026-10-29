@@ -105,7 +105,7 @@ let cachedModule = null;
 async function loadClient() {
   if (cachedModule !== null) return cachedModule;
   const bundles = loadBundle();
-  await import(new URL("../lib/client.js", import.meta.url).href);
+  await import(new URL("../src/client.js", import.meta.url).href);
   assert.equal(bundles.length, 1, "客户端 bundle 应注册一次");
   const bundle = bundles[0];
   assert.equal(bundle.id, "@local/dsh-bili-statistics");
@@ -288,7 +288,7 @@ test("缺翻译不炸：t 抛错时退回内置英文兜底", async () => {
   assert.ok(textOf(tree).includes("少刷游戏区"));
 });
 test("扫码登录卡片画出二维码并给出链接兜底", async () => {
-  const { encodeQr, toDots } = await import("../lib/qr.js");
+  const { encodeQr, toDots } = await import("../src/qr.js");
   const module = await loadClient();
   const { registered, dictionaries } = fakeContext(module);
   const card = registered.find((entry) => entry.spec.key === "bili_intent_login").component;

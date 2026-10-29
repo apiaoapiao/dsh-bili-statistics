@@ -5,13 +5,13 @@
   "description": "B 站观看统计：拉取观看历史、算出观看状态，让模型照视频标题写概览与计划完成情况，并可私信或邮件推送到自己。",
   "type": "module",
   "exports": {
-    ".": "./lib/index.js",
-    "./client": "./lib/client.js",
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg"
   },
   "files": [
-    "lib/**/*.js",
+    "src/**/*.js",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
