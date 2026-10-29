@@ -1,6 +1,6 @@
 /**
  * 设置页写入的覆盖层：<state_dir>/settings.json。
- * 为什么单独存一份：插件没有 schemastery Config，直接改 profile 的 cordis.patch.yml
+ * 
  * 需要自己解析 YAML 并处理并发，风险高于收益；这里只覆盖少数"内容型"设置，
  * 生效方式是启动时深合并到 profile 配置之上，改动后调用方 reload 即可。
  */

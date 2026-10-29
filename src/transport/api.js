@@ -1,7 +1,6 @@
 /**
  * 设置页的跨进程通道：挂在宿主 webServer 上的一小组同源 JSON 路由。
- * 为什么不用 typert remote：第三方插件无法把命名空间塞进客户端 assembly；
- * 为什么不走 session command：设置页是 root scope，拿不到 agent id，还会污染会话日志。
+ * 
  */
 
 export const API_PREFIX = '/bili-statistics/api';

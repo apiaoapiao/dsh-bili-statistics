@@ -1,12 +1,12 @@
 /**
  * dsh-bili-statistics 的浏览器半侧。
  *
- * 只做一件事：为 bili_intent_* 这组 wire 工具注册 `tool.call.toolview` 卡片。
+ * 为 bili_intent_* 这组 wire 工具注册 `tool.call.toolview` 卡片。
  * 卡片是只读的：它读宿主经 presentationMeta 落进 tool/result 的展示载荷，
- * 不发起任何远程调用（owner 里没有 sessionId，客户端按钮无法触发工具调用）。
+ * 不发起任何远程调用。
  *
  * 约束：必须是已构建的 __ModuleLoader__ bundle；只 require 平台冻结表里的 react；
- * 不 import 任何 @deepseek-ai/* 客户端包（primitives 被明令禁止，控件全部手写）。
+ * 
  */
 window.__ModuleLoader__.load({
   id: '@local/dsh-bili-statistics',

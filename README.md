@@ -1,216 +1,223 @@
-# dsh-bili-statistics
+<p align="center"><a href="./README.md">English</a> | <a href="./README.zh-CN.md">中文</a></p>
 
-把「计划」和「实际看了什么」摆在一起看的 B 站观看统计插件（DSH / DeepSeek Harness）。
+<p align="center"><strong>Bilibili Watch Statistics</strong> — <em>see what you actually watched.</em></p>
 
-它从 B 站官方接口读取**你自己**的观看历史，在本地算出一组统计事实，再让宿主大模型照着每条视频的标题写一段概览、一份计划完成情况，并按你设定的语气生成一条摘要；结果渲染成会话卡片、落盘 Markdown/HTML 报告，可推送 B 站私信或邮件。
+<p align="center"><sub>No runtime dependencies · QR sign-in · Local Markdown/HTML reports · DM &amp; email digests · Model-written overview and plan status</sub></p>
 
-它**不做**的事：不拦截、不屏蔽、不弹窗催促、不做专注模式、不自动干预、不评价自控力。
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="license"></a>
+  <a href="https://github.com/apiaoapiao/dsh-bili-statistics"><img src="https://img.shields.io/badge/GitHub-apiaoapiao%2Fdsh--bili--statistics-181717?style=flat-square&logo=github" alt="GitHub"></a>
+</p>
 
-## 功能
+A Bilibili watch-statistics plugin for DSH (DeepSeek Harness) that puts your **plan** next to **what you actually watched**.
 
-- **统计**：条数、平均完成度、22 点后占比、连续播放、与最近 14 次基线的对比，按日 / 周 / 月 / 自定义区间统计，支持自然日历与滚动窗口
-- **模型说明**：模型给本次观看起一个状态名（例如「深夜连刷推荐」）并写一句依据、一段 150–350 字概览、1–3 条计划完成情况；每条都要点到具体视频标题或作者，并引用至少 2 条记录编号
-- **报告**：Markdown 或 HTML 自包含单文件，按周期自动分进 `daily/`、`weekly/`、`monthly/`、`custom/` 子目录
-- **通知**：B 站私信与邮件，可多选；语气由一段可编辑的提示词控制，两个渠道共用
-- **定时**：每天 / 每周 / 每月 / 自定义区间，触发时间用下拉列表选，到点自己拉历史、写报告、发通知，不需要会话在场
-- **扫码登录**：网页通道与 TV 通道，网页通道被风控拦截时自动切换
-- **设置页**：登录、模型、提示词、定时、保存、通知都收在 DSH 设置里，不用记工具名
+It reads **your own** watch history from Bilibili's official API, computes a set of statistical facts locally, and then lets the host model write an overview, a plan-status section based on the real video titles, and a digest in the tone you configured. The result shows up as a session card, lands in a Markdown or HTML report, and can be delivered to your Bilibili DM inbox or an email address.
 
-## 环境要求
 
-- DSH（DeepSeek Harness）的 web profile
-- Node.js 22 或更高
-- 一个能扫码的 B 站账号用于读历史；想收私信再准备一个**不同的**账号用于发送（收发同 UID 会被接口拒绝）
+## Features
 
-## 安装
+- **Statistics** — item count, mean completion, share after 22:00, autoplay chains and a comparison against the last 14 runs; per day, week, month or custom range, with calendar or rolling windows
+- **Model notes** — the model names this period's viewing state (for example "late-night recommendation binge"), gives one line of evidence, a 150–350 word overview, and 1–3 plan-status items; every item has to mention a specific video title or author and cite at least 2 record indexes
+- **Reports** — Markdown or a self-contained HTML file, filed automatically into `daily/`, `weekly/`, `monthly/` and `custom/`
+- **Notifications** — Bilibili DM and email, either or both; the tone comes from one editable prompt that both channels share
+- **Scheduling** — daily, weekly, monthly or custom, with the trigger time picked from dropdowns; it fetches history, writes the report and sends the digest by itself, no session needed
+- **QR sign-in** — web and TV channels, switching to TV automatically when the web channel is blocked
+- **Settings page** — sign-in, model, prompts, schedule, saving and notifications all live in DSH Settings, so you never have to memorise tool names
+
+## Requirements
+
+- DSH (DeepSeek Harness) web profile
+- Node.js 22 or newer
+- A Bilibili account you can scan a QR code with, to read history; plus a **different** account to send DMs (the API rejects messages to yourself)
+
+## Install
 
 ```bash
 git clone https://github.com/apiaoapiao/dsh-bili-statistics.git
 
-# 装进 web profile（本地目录不需要联网，加 --offline 更快）
+# install into the web profile (a local directory needs no network; --offline is faster)
 dsh plugin --profile web add 'file:/path/to/dsh-bili-statistics' --offline
 ```
 
-包内自带默认配置，装好即可用。之后刷新 GUI 页面，工具、卡片与设置页就会出现。改过 `src/*.js` 之后需要重启 `dsh web`，ESM 已缓存的旧实现不会热替换。
+The package ships with defaults, so it works right after install. Refresh the GUI page and the tools, cards and settings page appear. Once you edit `src/*.js`, restart `dsh web` — the ESM loader caches the old implementation and will not hot-replace it.
 
-想改默认值，编辑 profile 的 `cordis.patch.yml`（字段见下方「配置」），或者直接用设置页——设置页写的是覆盖层，优先级更高。
+To change defaults, edit the profile's `cordis.patch.yml` (see [Configuration](#configuration)) or just use the settings page, which writes an override layer with higher priority.
 
-## 快速开始
+## Quick start
 
-1. 打开 DSH 设置，左栏找到「B 站观看统计」
-2. 「当前状态」里点「扫码登录」，选「读历史账号」，手机 B 站扫码并确认（网页通道被拦时会自动切到 TV 通道）
-3. 想收私信，再用同样方式登录「发私信号」
-4. 在「模型与语气」里选一个 provider 与 model；不选也能用，只是报告里只有数字
-5. 点「立即统计一次」，在「本次输出预览」里看摘要长什么样
-6. 想定时收，在「定时任务」里打开开关、选周期与触发时间，再在「通知渠道」勾好私信或邮件
+1. Open DSH Settings and pick **Bilibili watch statistics** in the sidebar
+2. Under **Current status**, click **Scan** → **Account that reads watch history**, then scan with the Bilibili app and confirm (the web channel falls back to TV automatically if blocked)
+3. To receive DMs, sign in a second account the same way, this time choosing **Account that sends DMs**
+4. Under **Model and tone**, pick a provider and model; it also works without one, the report just lists numbers
+5. Click **Run statistics now** and check **Latest output** to see what the digest looks like
+6. For scheduled runs, enable **Schedule**, choose a period and trigger time, then tick **DM** or **Email** under **Notification channels**
 
-## 使用
+## Usage
 
-### 设置页
+### Settings page
 
-| 区域 | 能做什么 |
+| Area | What you can do |
 | --- | --- |
-| 当前状态 | 看计划、最近一次统计、两个账号是否登录 |
-| 扫码登录 | 选「读号」或「发私信号」生成二维码，确认后自动保存凭据，也能一键退出 |
-| 计划 | 直接改写计划文本（等价于 `bili_intent_set`） |
-| 模型与语气 | 选 provider / model、开关「模型写概览与计划情况」、编辑提示词、改最大 token 与超时 |
-| 定时任务 | 开关定时、选周期与窗口、用下拉列表选小时/分钟（每周再加星期、每月再加日期）、看下次触发时间与上次触发结果 |
-| 本地保存 | 开关是否落盘、选格式、改报告目录（可填路径或用常用位置，也能先「检查目录」） |
-| 通知渠道 | 勾选 B 站私信 / 邮件，填两个渠道共用的语气提示词，再用「私信设置」「邮件设置」进入各自的表单与测试按钮 |
-| 手动触发 | 「立即统计一次」 |
-| 本次输出预览 | 显示刚生成的摘要，确认私信会写成什么样 |
+| Current status | See your plan, the latest run, and whether both accounts are signed in |
+| Scan | Pick the role that reads history or the one that sends DMs, show a QR code, save credentials after confirmation, or log out |
+| Plan | Rewrite the plan text directly (same as `bili_intent_set`) |
+| Model and tone | Pick provider / model, toggle "Model writes overview and plan status", edit prompts, adjust max tokens and timeout |
+| Schedule | Enable scheduling, choose period and window, pick hour and minute from dropdowns (plus weekday for weekly, day of month for monthly), and see the next fire time and the last trigger result |
+| Local saving | Toggle saving to disk, pick the format, change the report directory (type a path or choose a common location, or **Check directory** first) |
+| Notification channels | Tick Bilibili DM and/or email, edit the tone prompt shared by both, then enter each channel's form and test button via **DM settings** / **Email settings** |
+| Manual triggers | **Run statistics now** |
+| Latest output | Shows the freshly generated digest, so you know what the DM will say |
 
-设置页写入的是 `state_dir/settings.json`，启动时深合并到 profile 配置之上，所以重启后仍生效；删掉该文件就回到 profile 配置。设置页只允许改模型、提示词、开关、摘要长度、接收方 UID、定时规则、保存格式、报告目录、通知渠道与 SMTP 设置；cookie、发送方 UID 仍然只能走 profile 配置，提交这些字段会被拒绝并在返回里列出键名。
+The settings page writes `state_dir/settings.json`, which is deep-merged on top of the profile config at startup, so it survives restarts; delete that file to fall back to the profile config. It may only change the model, prompts, toggles, digest length, recipient UID, schedule rules, save format, report directory, notification channels and SMTP settings. Cookies and the sender UID still have to come from the profile config — submitting those fields is rejected and the rejected keys are listed in the response.
 
-### 会话里的工具
+### Tools in a session
 
-不用设置页时，也可以直接在会话里让模型调用工具：
+Without the settings page you can also let the model call tools directly in a session:
 
-| 工具 | 作用 |
+| Tool | What it does |
 | --- | --- |
-| `bili_intent_set` | 记录本轮计划（自由文本） |
-| `bili_intent_status` | 查看计划、最近一次统计、定时下次触发、通知渠道、两个账号的登录状态 |
-| `bili_intent_login` | 生成扫码登录二维码（`role`: reader / sender） |
-| `bili_intent_login_poll` | 查询扫码状态并保存凭据（`wait_seconds`: 0–60） |
-| `bili_intent_facts` | 拉历史 + 算统计事实（`mode`: daily/weekly/monthly/custom，`window`: calendar/rolling，`from`/`to`） |
-| `bili_intent_annotate` | 写入 1–3 条计划情况（模型没给出判断时的备份） |
-| `bili_intent_report` | 生成卡片并落盘 Markdown/HTML |
-| `bili_intent_feedback` | 对结果打分（accurate / inexact / incomplete / useless） |
-| `bili_intent_notify` | 推送摘要，`dry_run: true` 只预览 |
+| `bili_intent_set` | Record the plan for this round (free text) |
+| `bili_intent_status` | Plan, latest run, next scheduled fire, notification channels, sign-in state of both accounts |
+| `bili_intent_login` | Create a QR sign-in code (`role`: reader / sender) |
+| `bili_intent_login_poll` | Check the scan state and save credentials (`wait_seconds`: 0–60) |
+| `bili_intent_facts` | Fetch history and compute statistical facts (`mode`: daily/weekly/monthly/custom, `window`: calendar/rolling, `from` / `to`) |
+| `bili_intent_annotate` | Store 1–3 plan-status items (a fallback when the model gives no conclusions) |
+| `bili_intent_report` | Render the card and save Markdown/HTML |
+| `bili_intent_feedback` | Rate the result (accurate / inexact / incomplete / useless) |
+| `bili_intent_notify` | Push the digest; `dry_run: true` only previews it |
 
-典型工具链：
+A typical chain:
 
 ```
-bili_intent_set(text="这周想早点睡，晚上尽量不看长视频")
+bili_intent_set(text="I want to sleep earlier this week, no long videos at night")
 bili_intent_facts(mode="weekly")
-bili_intent_report(run_id="<上一步的 run_id>")
+bili_intent_report(run_id="<run_id from the previous call>")
 ```
 
-`facts` 返回统计事实与编号后的证据列表。想让模型自己判断，可以在 `facts` 之后让它在会话里写 1–3 条结论，再调用 `bili_intent_annotate`（每条必须引用 ≥2 个有效编号），最后 `bili_intent_report`。
+`facts` returns the statistics plus an indexed evidence list. If you want the model to judge for itself, let it write 1–3 conclusions in the session after `facts`, store them with `bili_intent_annotate` (each must cite at least 2 valid indexes), then call `bili_intent_report`.
 
-### 定时任务
+### Scheduled runs
 
-周期决定「多久跑一次」，窗口决定「每次统计哪一段」：
+The period decides how often it runs; the window decides which range is measured:
 
-| 周期 | 自然日历（calendar） | 滚动（rolling） |
+| Period | Calendar | Rolling |
 | --- | --- | --- |
-| `daily` | **默认**：昨天整天 | 从触发时刻往前推 24 小时 |
-| `weekly` | 过去 7 个自然日 | 从触发时刻往前推 7×24 小时 |
-| `monthly` | 上一个自然月 | 从触发时刻往前推 30 天 |
-| `custom` | 用 `custom_from` / `custom_to` 指定区间 | 同左（自定义区间优先） |
+| `daily` | **Default**: all of yesterday | 24 hours before the trigger time |
+| `weekly` | the past 7 calendar days | 7×24 hours before the trigger time |
+| `monthly` | the previous calendar month | 30 days before the trigger time |
+| `custom` | the range given by `custom_from` / `custom_to` | same (a custom range wins) |
 
-默认触发时间：每天 22:00、每周一 08:00、每月 1 日 08:00。设置页里不用写 cron，选小时与分钟（每 5 分钟一档）即可；配置文件和工具参数仍接受五段 cron。
+Default trigger times: 22:00 daily, Monday 08:00 weekly, the 1st at 08:00 monthly. You never type cron in the settings page — pick an hour and minute (5-minute steps); the profile config and tool arguments still accept a five-field cron.
 
-每次到点都重新拉一遍历史、重新统计、重新写报告，没有「同一天只跑一次」这类跳过，保证数字是当下重新拉的。唯一的跳过情形是还没登录 B 站，这时会在触发记录里写明原因。手动「立即统计一次」与定时互不干扰：手动只统计与落盘、不发通知；定时照常重新统计、照常发通知。
+Every fire re-fetches history, recomputes and rewrites the report; there is no "only once a day" skipping, so the numbers are always fresh. The only skip is "not signed in to Bilibili yet", and the trigger log records the reason. **Run statistics now** does not interfere with the schedule: a manual run only collects and saves, it sends no notifications; the schedule keeps recomputing and notifying as usual.
 
-### 通知
+### Notifications
 
-- **B 站私信**：需要两个不同 UID。接收方默认取「读历史账号」，想让别的号收到，在「通知渠道 → 私信设置 → 接收方 UID」里填。
-- **邮件**：QQ / 163 用 SMTP 授权码（不是登录密码），Gmail 用应用专用密码。`465 + 隐式 TLS` 或 `587 + STARTTLS`，两者必须配对。`from` 要与 SMTP 登录账号一致，可以等于 `to`（自发自收）。
-- **内容边界**：正文只有一条不超过 `summary_max_chars`（默认 200 字）的摘要，不含原始观看记录、不含 cookie、不含 SMTP 凭据；只有显式打开 `attach_report` 才额外附一份 Markdown 报告。
-- **失败隔离**：某个渠道失败不影响另一个，也不影响报告落盘。每个渠道各有一条成功/失败结果，任一成功即视为已送达。
-- **不限次数**：定时到点且勾了渠道就发，觉得吵就少勾渠道或把周期改成每周 / 每月。
+- **Bilibili DM** — needs two different UIDs. The recipient defaults to the history account; put a different UID under **Notification channels → DM settings → Recipient UID** if you want it elsewhere.
+- **Email** — QQ / 163 use an SMTP authorization code (not your login password), Gmail uses an app password. Use `465 + implicit TLS` or `587 + STARTTLS`; the port and the encryption setting must match. `from` must equal the SMTP login account and may equal `to` (send to yourself).
+- **Content boundary** — the body is a single digest of at most `summary_max_chars` (200 by default). It contains no raw watch history, no cookies and no SMTP credentials; a Markdown report is attached only when `attach_report` is explicitly enabled.
+- **Failure isolation** — one failing channel affects neither the other channel nor writing the report. Each channel gets its own result, and a single success counts as delivered.
+- **No rate limit** — whenever the schedule fires with a channel ticked, it sends. If that is too noisy, untick a channel or switch the period to weekly / monthly.
 
-## 报告与数据
+## Reports and data
 
-报告默认落在 `~/.dsh/bili-statistics/reports/`，按窗口分子目录，文件名取**被统计区间的最后一天**（不是点按钮那天）：
+Reports go to `~/.dsh/bili-statistics/reports/` by default and are filed into a subdirectory per window. The filename uses the **last day of the measured range**, not the day you clicked the button:
 
-| 窗口 | 子目录 | 文件名示例 |
+| Window | Subdirectory | Example filename |
 | --- | --- | --- |
-| 日 | `daily/` | `report-2026-10-28.md` |
-| 周 | `weekly/` | `report-2026-W44.md`（ISO 周号） |
-| 月 | `monthly/` | `report-2026-10.md` |
-| 自定义 | `custom/` | `report-2026-10-28-custom.md` |
+| Daily | `daily/` | `report-2026-10-28.md` |
+| Weekly | `weekly/` | `report-2026-W44.md` (ISO week) |
+| Monthly | `monthly/` | `report-2026-10.md` |
+| Custom | `custom/` | `report-2026-10-28-custom.md` |
 
-同一窗口重复统计仍是同名覆盖（保持「一天一份」），不同窗口互不覆盖。报告目录可以在设置页里改，保存前可以先「检查目录」——宿主会真的建目录并试写一个临时文件。
+Re-running the same window overwrites the same file (one file per day), while different windows never overwrite each other. The report directory can be changed in the settings page; click **Check directory** before saving — the host really creates the directory and writes a temporary probe file.
 
-`state_dir`（默认 `~/.dsh/bili-statistics`）里还有：
+`state_dir` (default `~/.dsh/bili-statistics`) also holds:
 
-- `state.json`：计划、每次统计的运行记录、计划情况、反馈、触发日志
-- `credentials.json`：扫码登录得到的 SESSDATA、bili_jct、UID、昵称
-- `settings.json`：设置页写入的覆盖层
+- `state.json` — the plan, every run, plan-status items, feedback and the trigger log
+- `credentials.json` — SESSDATA, bili_jct, UID and nickname from QR sign-in
+- `settings.json` — the override layer written by the settings page
 
-凭据是**明文**保存的，注意本机文件权限；删除 `state_dir` 即彻底重置。从旧名字 `dsh-bili-intent-drift` 升级时，旧数据目录会被整份复制过来，扫码登录与历史报告不用重做。
+Credentials are stored in **plain text**; mind the file permissions. Deleting `state_dir` resets everything. When upgrading from the old name `dsh-bili-intent-drift`, the old data directory is copied over once, so sign-in and past reports carry over.
+## Configuration
 
-## 配置
-
-键名与默认值（都可以在 profile 的 `cordis.patch.yml` 里改）：
+Keys and defaults (all of them can be changed in the profile's `cordis.patch.yml`):
 
 ```yaml
 bili:
-  sessdata: ''            # 留空则用扫码登录保存的凭据
-  bili_jct: ''            # 同上
-  page_size: 30           # 接口上限 30
+  sessdata: ''            # empty = use the credentials saved by QR sign-in
+  bili_jct: ''            # same
+  page_size: 30           # the API caps this at 30
   request_interval_ms: 400
   max_pages: 40
 schedule:
   enabled: true
   mode: daily             # daily | weekly | monthly | custom
   window: calendar        # calendar | rolling
-  cron: ''                # 留空按周期取默认（22:00 / 周一 08:00 / 1 日 08:00）
+  cron: ''                # empty = period default (22:00 / Mon 08:00 / 1st 08:00)
   timezone: Asia/Shanghai
-  custom_from: ''         # mode: custom 时必填
+  custom_from: ''         # required when mode: custom
   custom_to: ''
 report:
   save_local: true
   local_dir: ~/.dsh/bili-statistics/reports
   format: markdown        # markdown | html | both
-  evidence_limit: 20      # 2–40，交给模型的证据条数
-  polish: true            # 模型写概览与计划情况
+  evidence_limit: 20      # 2–40, how many records are handed to the model
+  polish: true            # model writes the overview and plan status
 llm:
-  provider: ''            # 留空表示不调用模型
+  provider: ''            # empty = never call the model
   model: ''
-  report_prompt: ''       # 概览与计划情况的写法（管文风，不管 JSON 格式）
-  dm_prompt: ''           # 私信与邮件共用的改写提示词（控语气），可用 {max_chars}
-  max_tokens: 2000        # 800–8000；实际润色时报告至少 2000、私信至少 1600
+  report_prompt: ''       # how to write the overview and plan status (style only, not the JSON shape)
+  dm_prompt: ''           # rewrite prompt shared by DM and email (controls tone); {max_chars} supported
+  max_tokens: 2000        # 800–8000; at render time report ≥ 2000, DM ≥ 1600
   timeout_ms: 20000
 notify:
-  channels: [bili_dm]     # bili_dm / email，可多选；[] 表示不发通知
+  channels: [bili_dm]     # bili_dm / email, any combination; [] disables notifications
   summary_max_chars: 200  # 60–800
   bili_dm:
-    sender_sessdata: ''   # 留空则用扫码登录的「发私信号」
+    sender_sessdata: ''   # empty = the signed-in sender account
     sender_bili_jct: ''
     sender_mid: ''
-    receiver_mid: ''      # 留空自动用「读历史账号」的 UID
+    receiver_mid: ''      # empty = the UID of the history account
   email:
-    host: ''              # 例如 smtp.qq.com；留空表示没配邮件
-    port: 465             # 465 + secure: true，或 587 + secure: false
+    host: ''              # e.g. smtp.qq.com; empty = email not configured
+    port: 465             # 465 + secure: true, or 587 + secure: false
     secure: true
-    allow_plain: false    # 只有内网服务器不需要加密时才打开
-    user: ''              # SMTP 登录账号，通常与 from 相同
-    pass: ''              # SMTP 授权码
-    from: ''              # 发件地址，须与 SMTP 账号一致
-    to: ''                # 收件地址，可以等于 from
+    allow_plain: false    # only for internal relays that cannot do TLS
+    user: ''              # SMTP login account, usually the same as from
+    pass: ''              # SMTP authorization code
+    from: ''              # sender address, must match the SMTP account
+    to: ''                # recipient address, may equal from
     from_name: B站观看统计
     subject_prefix: '[B站观看统计]'
-    attach_report: false  # 打开后额外附一份 Markdown 报告
+    attach_report: false  # attach a Markdown report as well
     timeout_ms: 20000
-    retries: 1            # 仅 4xx 重试
+    retries: 1            # only 4xx are retried
     backoff_ms: 2000
 state_dir: ~/.dsh/bili-statistics
 ```
 
-## 隐私
+## Privacy
 
-- 只读 B 站官方接口，只取你自己账号的观看历史；不发任何写操作（私信除外，只发给你指定的接收方）
-- 统计与报告都在本机生成，不上传到第三方；模型调用走你在 DSH 里配置的 provider
-- 仓库里没有任何账号凭据。TV 扫码通道用的 `appkey` / `appsec` 是 B 站 TV 客户端的公开常量，不代表任何个人账号
-- 你的 SESSDATA、bili_jct、UID 与邮箱授权码只存在于本机的 `state_dir` 或 profile 配置里
+- Reads Bilibili's official API only, and only your own watch history; no write operations except DMs, and those go only to the recipient you specify
+- Statistics and reports are generated locally and never uploaded; model calls go to the provider you configured in DSH
+- The repository contains no account credentials. The `appkey` / `appsec` used by the TV sign-in channel are public constants of Bilibili's TV client and belong to no personal account
+- Your SESSDATA, bili_jct, UID and email authorization code live only in your local `state_dir` or profile config
 
-## 已知限制
+## Known limitations
 
-- 观看历史接口**不返回来源**，「主动点的还是自动播的」只能按完成度、时长与连续播放推断。规则先投一个标签并给出可信度，模型再结合标题写成一句人看得懂的状态名；没有模型时显示规则标签与可信度
-- 分页受 `max_pages` 限制，超长窗口可能被截断；接口有频率限制，默认 400ms 间隔，遇到 `-352` / `-412` 会退避重试
-- 模型依赖宿主的 `llm` 服务：没选 provider/model、超时或报错时，报告只留数字、通知退回模板摘要，不报错；输出被 token 截断时会给出提示，把 `max_tokens` 调大即可
-- 邮件客户端是自带的最小 SMTP 实现，不支持 OAuth2；B 站私信是纯文本且要求收发账号不同
-- 网页扫码通道可能被 B 站风控拦截（`-412`），此时会自动切到 TV 扫码通道
+- The watch-history API **does not return the source**, so "did I click this or did autoplay?" can only be inferred from completion, duration and consecutive plays. Rules vote for a label with a confidence, then the model turns it into a human-readable name using the titles; without a model you see the rule label and its confidence
+- Paging is bounded by `max_pages`, so very long windows may be truncated; the API is rate limited (400 ms interval by default) and retries with backoff on `-352` / `-412`
+- Model output depends on the host's `llm` service: with no provider/model selected, on timeout, or on error, the report keeps its numbers and notifications fall back to the template digest, with no error raised; when output is cut off by tokens you get a hint, and raising `max_tokens` fixes it
+- The email client is a minimal built-in SMTP implementation without OAuth2; Bilibili DMs are plain text and require different sender and receiver accounts
+- The web QR channel may be blocked by Bilibili's risk control (`-412`); the plugin then switches to the TV channel automatically
 
-## 实现说明
+## Implementation notes
 
-纯 ESM，没有构建步骤，也没有第三方运行时依赖——二维码编码器与 SMTP 客户端都是自带实现（只用 Node 内置模块）。宿主侧提供工具、状态与定时，浏览器侧提供会话卡片与设置页。
+Pure ESM, no build step and no third-party runtime dependencies — the QR encoder and the SMTP client are built in and use Node core modules only. The host side provides tools, state and scheduling; the browser side provides session cards and the settings page.
 
-源码按职责分层：`src/domain`（统计与渲染，纯函数）、`src/adapters`（B 站接口与 SMTP）、`src/core`（状态、凭据、配置）、`src/services`（模型调用、通知）、`src/tools` 与 `src/transport`（工具定义、设置页接口）、`src/index.js`（只做编排）。
+The source is layered by responsibility: `src/domain` (statistics and rendering, pure functions), `src/adapters` (Bilibili API and SMTP), `src/core` (state, credentials, config), `src/services` (model calls, notifications), `src/tools` and `src/transport` (tool definitions, settings-page API), and `src/index.js` (orchestration only).
 
-## 许可
+## License
 
-尚未声明开源许可证。在补充 LICENSE 之前，默认保留所有权利。
+Released under the MIT License. See [LICENSE](./LICENSE).

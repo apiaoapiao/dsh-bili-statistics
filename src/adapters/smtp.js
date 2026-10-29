@@ -1,7 +1,6 @@
 /**
- * 最小 SMTP 客户端：只做一件事——把一段纯文本（可选附带一个 Markdown 附件）发出去。
- * 为什么不用 nodemailer：本机 npm 安装被沙箱拦（EPERM），而 SMTP 协议本身足够简单，
- * 用 node:net / node:tls 说一遍，反而少一个运行时依赖与一处供应链风险。
+ * 最小 SMTP 客户端：把一段纯文本发出去。
+ * 用 node:net / node:tls 减少运行时依赖与一处供应链风险。
  * 只支持 AUTH LOGIN（QQ / 163 / Gmail 都支持），不实现 OAuth2 与 SMTPUTF8。
  */
 import net from 'node:net';
