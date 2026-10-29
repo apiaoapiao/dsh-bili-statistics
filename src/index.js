@@ -4,22 +4,21 @@
  * 报告里的概览与计划情况由插件自己调用宿主 LLM 生成（可在设置页关闭），会话里的模型也可以用 annotate 覆盖。
  */
 import { buildCookieHeader } from './adapters/bili.js';
-import { resolveWindow, formatLocal, nextCronFire, defaultCronFor } from './domain/time.js';
-import { modelTarget } from './services/polish.js';
+import { nextCronFire, defaultCronFor } from './domain/time.js';
 import { registerApi, API_PREFIX } from './transport/api.js';
 import { loadOverrides } from './core/store.js';
-import { DEFAULT_CONFIG, DEFAULT_REPORT_DIR, NOTIFY_CHANNELS, clampInt, normalizeConfig, pickExistingDir } from './config/defaults.js';
-import { redact, showMid } from './core/present.js';
+import { DEFAULT_CONFIG, DEFAULT_REPORT_DIR, NOTIFY_CHANNELS, normalizeConfig, pickExistingDir } from './config/defaults.js';
 import { migrateLegacyStateDir } from './core/migrate.js';
 import { createTools } from './tools/index.js';
 import { createHandlers } from './transport/handlers.js';
 import { collectRun as collectRunImpl } from './services/collect.js';
 import { renderReport as renderReportImpl, composeDm as composeDmImpl, emailAttachment as emailAttachmentImpl } from './services/render.js';
+import { statusSnapshot as statusSnapshotImpl } from './services/status.js';
+import { startLogin as startLoginImpl, pollLogin as pollLoginImpl } from './services/login.js';
 import { deliverAll } from './services/notify.js';
 import {
   loadState,
   saveState,
-  daysSinceSet,
   markNotified,
   recordScheduleEvent
 } from './core/state.js';
@@ -27,9 +26,7 @@ import { expandHome, truncate, deepMerge } from './core/util.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { encodeQr, toDots, ECC } from './core/qr.js';
-import { generateQr, pollQr, generateTvQr, pollTvQr, fetchNav, buildCookie as buildLoginCookie } from './adapters/bili-login.js';
-import { loadCreds, setRoleCreds, setPending, setChannel, cookieFrom, describeLogin } from './core/creds.js';
+import { loadCreds, cookieFrom, describeLogin } from './core/creds.js';
 
 
 export const inject = ['tools'];
@@ -174,195 +171,21 @@ export function apply(ctx, config) {
     };
   }
 
-  /** 状态快照：工具与设置页共用同一份字段，避免两处口径不一致。 */
-  function statusSnapshot() {
-    const state = loadState(stateDir);
-    const creds = loadCreds(stateDir);
-    const latest = state.runs[0] ?? null;
-    let nextFire = null;
-    let nextWindow = null;
-    if (cfg.schedule.enabled) {
-      const expression = cfg.schedule.cron || defaultCronFor(cfg.schedule.mode);
-      try {
-        const epoch = nextCronFire(expression, Date.now(), zone);
-        nextFire = epoch === null ? null : formatLocal(epoch, zone);
-        if (epoch !== null) {
-          nextWindow = resolveWindow({
-            mode: cfg.schedule.mode,
-            windowMode: cfg.schedule.window,
-            now: epoch,
-            timeZone: zone,
-            customFrom: cfg.schedule.custom_from,
-            customTo: cfg.schedule.custom_to,
-            weeklyAnchorMs: epoch
-          }).label;
-        }
-      } catch (error) {
-        nextFire = 'cron 无法解析：' + (error?.message ?? String(error));
-      }
-    }
-    return {
-      intention: state.intention
-        ? { text: state.intention.text, created_at: state.intention.created_at, days_since_set: daysSinceSet(state.intention) }
-        : null,
-      latest_run: latest
-        ? {
-            id: latest.id,
-            created_at: latest.created_at,
-            total_items: latest.total_items,
-            shape: latest.shape,
-            shape_label: typeof latest?.generated?.shape?.label === 'string' && latest.generated.shape.label.trim().length > 0 ? latest.generated.shape.label.trim() : null
-          }
-        : null,
-      run_count: state.runs.length,
-      feedback_count: state.feedback.length,
-      hypothesis_count: state.hypotheses.length,
-      schedule: {
-        ...scheduleSnapshot(),
-        next_fire: nextFire,
-        next_window: nextWindow,
-        last_event: state.schedule_log[0] ?? null,
-        recent_events: state.schedule_log.slice(0, 3)
-      },
-      notify: (() => {
-        const dm = effectiveNotifyConfig().bili_dm;
-        const email = cfg.notify.email;
-        return {
-          channels: cfg.notify.channels,
-          summary_max_chars: cfg.notify.summary_max_chars,
-          bili_dm_sender: showMid(dm.sender_mid),
-          bili_dm_receiver: showMid(dm.receiver_mid),
-          bili_dm_receiver_source: dm.receiver_mid ? dm.receiver_source ?? null : null,
-          email: {
-            enabled: cfg.notify.channels.includes('email'),
-            configured: Boolean(email.host && email.from && email.to),
-            host: email.host || '未配置',
-            port: email.port,
-            secure: email.secure,
-            user: email.user ? redact(email.user) : '未配置',
-            from: email.from || '未配置',
-            to: email.to || '未配置',
-            from_name: email.from_name,
-            subject_prefix: email.subject_prefix,
-            attach_report: email.attach_report
-          }
-        };
-      })(),
-      report: {
-        save_local: cfg.report.save_local,
-        format: cfg.report.format,
-        local_dir: expandHome(cfg.report.local_dir),
-        polish: cfg.report.polish
-      },
-      llm: {
-        enabled: cfg.llm.enabled,
-        provider: cfg.llm.provider,
-        model: cfg.llm.model,
-        ready: modelTarget(cfg) !== null,
-        report_polish: cfg.report.polish
-      },
-      bili: { has_cookie: readerCredentials().cookie.length > 0 },
-      login: {
-        reader: describeLoginSlot('reader'),
-        sender: describeLoginSlot('sender'),
-        pending: creds.pending
-          ? {
-              role: creds.pending.role,
-              channel: creds.pending.channel === 'tv' ? 'tv' : 'web',
-              expires_at: creds.pending.expires_at ?? null
-            }
-          : null,
-        channel: creds.channel
-      },
-      state_dir: stateDir
-    };
-  }
-
-  /** 生成扫码二维码（工具与设置页共用）。channel=web 走网页端，tv 走 TV 端（网页端被风控拦截时的备用通道）。 */
-  async function startLogin(role, options = {}) {
-    const who = role === 'sender' ? 'sender' : 'reader';
-    const saved = loadCreds(stateDir).channel;
-    const channel = options.channel === 'tv' || options.channel === 'web' ? options.channel : saved === 'tv' ? 'tv' : 'web';
-    const { qrcodeKey, url } = channel === 'tv' ? await generateTvQr() : await generateQr();
-    const qr = encodeQr(url, { ecc: ECC.MEDIUM, minVersion: 1, maxVersion: 10 });
-    const expiresIn = 180;
-    setPending(stateDir, {
-      qrcode_key: qrcodeKey,
-      role: who,
-      channel,
-      created_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + expiresIn * 1000).toISOString()
+  /** 状态快照：工具与设置页共用的只读汇总。见 services/status.js。 */
+  const statusSnapshot = () =>
+    statusSnapshotImpl({
+      stateDir,
+      getConfig: () => cfg,
+      scheduleSnapshot,
+      effectiveNotifyConfig,
+      describeLoginSlot,
+      readerCredentials
     });
-    setChannel(stateDir, channel);
-    return { role: who, channel, qrcode_key: qrcodeKey, url, dots: toDots(qr), size: qr.size, expires_in_seconds: expiresIn };
-  }
 
-  /** 轮询扫码结果并落盘凭据（工具与设置页共用）。网页端被风控拦截（-412）时自动切到 TV 通道。 */
-  async function pollLogin({ qrcodeKey, waitSeconds = 15, signal } = {}) {
-    const creds = loadCreds(stateDir);
-    const pending = creds.pending;
-    const key = qrcodeKey && String(qrcodeKey).trim().length > 0 ? String(qrcodeKey).trim() : pending?.qrcode_key;
-    if (!key) throw new Error('没有待完成的扫码登录：请先调用 bili_intent_login 生成二维码');
-    const role = pending && pending.qrcode_key === key ? pending.role : 'reader';
-    const channel =
-      pending && pending.qrcode_key === key && pending.channel === 'tv' ? 'tv' : creds.channel === 'tv' ? 'tv' : 'web';
-    const wait = clampInt(waitSeconds ?? 15, 0, 60, 15);
-    const deadline = Date.now() + wait * 1000;
-    const switchToTv = () => {
-      setChannel(stateDir, 'tv');
-      return {
-        state: 'switch',
-        role,
-        channel: 'tv',
-        qrcode_key: key,
-        message: 'B 站拦截了网页端扫码请求（code -412），已切换到 TV 扫码通道'
-      };
-    };
-    const isBanned = (result) =>
-      channel === 'web' &&
-      result &&
-      (result.apiCode === -412 || (typeof result.message === 'string' && /-?412/.test(result.message)));
-    const once = async () => {
-      try {
-        return channel === 'tv' ? await pollTvQr({ qrcodeKey: key }) : await pollQr({ qrcodeKey: key });
-      } catch (error) {
-        const message = String(error && error.message ? error.message : error);
-        if (channel === 'web' && /412/.test(message)) return { state: 'banned', message, apiCode: 412 };
-        return { state: 'error', message, apiCode: null };
-      }
-    };
-    let last = await once();
-    if (last.state === 'banned') return switchToTv();
-    if (isBanned(last)) return switchToTv();
-    while (last.state !== 'confirmed' && last.state !== 'expired' && last.state !== 'error' && Date.now() < deadline) {
-      await sleep(2000);
-      if (Date.now() > deadline) break;
-      last = await once();
-      if (last.state === 'banned') return switchToTv();
-      if (isBanned(last)) return switchToTv();
-    }
-    if (last.state !== 'confirmed') {
-      return { state: last.state, role, channel, qrcode_key: key, message: last.message };
-    }
-    const nav = await fetchNav({ cookie: buildLoginCookie(last.sessdata, last.biliJct) });
-    const entry = {
-      sessdata: last.sessdata,
-      bili_jct: last.biliJct,
-      mid: nav?.mid ?? last.mid ?? null,
-      uname: nav?.uname ?? null
-    };
-    setRoleCreds(stateDir, role, entry);
-    return {
-      state: 'confirmed',
-      role,
-      channel,
-      qrcode_key: key,
-      mid: entry.mid,
-      uname: entry.uname,
-      usable: nav !== null,
-      message: nav === null ? '凭据已保存，但 nav 接口未确认可用，稍后可用 bili_intent_status 复查' : '扫码登录成功'
-    };
-  }
+  /** 扫码登录：生成二维码、轮询结果并落盘凭据。见 services/login.js。 */
+  const startLogin = (role, options = {}) => startLoginImpl(role, options, { stateDir });
+
+  const pollLogin = (options = {}) => pollLoginImpl(options, { stateDir });
 
   for (const definition of createTools({
     stateDir,
