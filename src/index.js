@@ -3,38 +3,33 @@
  * 职责：注册 bili_intent_* 工具、按配置定时统计、把统计事实与计划情况落盘并投递私信。
  * 报告里的概览与计划情况由插件自己调用宿主 LLM 生成（可在设置页关闭），会话里的模型也可以用 annotate 覆盖。
  */
-import { computeFacts } from './domain/facts.js';
-import { fetchHistory, buildCookieHeader } from './adapters/bili.js';
-import { resolveWindow, formatLocal, nextCronFire, defaultCronFor, SCHEDULE_MODES, WINDOW_MODES } from './domain/time.js';
-import { saveReport, buildSummary, renderMarkdown } from './domain/report.js';
-import { polishReport, polishDm, modelTarget, DEFAULT_REPORT_PROMPT, DEFAULT_DM_PROMPT } from './services/polish.js';
+import { buildCookieHeader } from './adapters/bili.js';
+import { resolveWindow, formatLocal, nextCronFire, defaultCronFor } from './domain/time.js';
+import { modelTarget } from './services/polish.js';
 import { registerApi, API_PREFIX } from './transport/api.js';
-import { loadOverrides, saveOverrides, settingsFile, pickEditable } from './core/store.js';
-import { DEFAULT_CONFIG, DEFAULT_REPORT_DIR, NOTIFY_CHANNELS, TONE_WORDS, clampInt, normalizeConfig, pickExistingDir } from './config/defaults.js';
-import { OUTPUT_SCHEMA, cardPayload } from './contracts/card-meta.js';
-import { redact, showMid, roleLabel, describePollResult, describeLoginState, pickEvidence, textOut } from './core/present.js';
+import { loadOverrides } from './core/store.js';
+import { DEFAULT_CONFIG, DEFAULT_REPORT_DIR, NOTIFY_CHANNELS, clampInt, normalizeConfig, pickExistingDir } from './config/defaults.js';
+import { redact, showMid } from './core/present.js';
 import { migrateLegacyStateDir } from './core/migrate.js';
 import { createTools } from './tools/index.js';
+import { createHandlers } from './transport/handlers.js';
+import { collectRun as collectRunImpl } from './services/collect.js';
+import { renderReport as renderReportImpl, composeDm as composeDmImpl, emailAttachment as emailAttachmentImpl } from './services/render.js';
 import { deliverAll } from './services/notify.js';
 import {
   loadState,
   saveState,
-  setIntention,
   daysSinceSet,
-  recordRun,
-  recordHypotheses,
-  recordFeedback,
   markNotified,
-  recordScheduleEvent,
-  makeId
+  recordScheduleEvent
 } from './core/state.js';
-import { expandHome, truncate, pct, isPlainObject, deepMerge } from './core/util.js';
+import { expandHome, truncate, deepMerge } from './core/util.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { encodeQr, toDots, ECC } from './core/qr.js';
 import { generateQr, pollQr, generateTvQr, pollTvQr, fetchNav, buildCookie as buildLoginCookie } from './adapters/bili-login.js';
-import { loadCreds, saveCreds, setRoleCreds, setPending, clearPending, setChannel, cookieFrom, describeLogin, ROLES } from './core/creds.js';
+import { loadCreds, setRoleCreds, setPending, setChannel, cookieFrom, describeLogin } from './core/creds.js';
 
 
 export const inject = ['tools'];
@@ -130,72 +125,9 @@ export function apply(ctx, config) {
 
   if (migratedFrom) log('info', '旧数据目录已迁移到 ' + migratedFrom + '（原目录保留，可手动删除）');
 
-  /** 拉取 + 统计 + 记账，返回最新的 run。 */
-  async function collectRun(options = {}) {
-    const now = Date.now();
-    const state = loadState(stateDir);
-    const mode = options.mode ?? cfg.schedule.mode;
-    const windowMode = options.window ?? cfg.schedule.window;
-    const window = resolveWindow({
-      mode,
-      windowMode,
-      now,
-      timeZone: zone,
-      customFrom: options.from ?? cfg.schedule.custom_from,
-      customTo: options.to ?? cfg.schedule.custom_to,
-      weeklyAnchorMs: now
-    });
-    const { cookie } = readerCredentials();
-    if (cookie.length === 0) {
-      throw new Error('还没有登录 B 站：请先调用 bili_intent_login 扫码登录（role=reader），或在插件配置的 bili.sessdata 里填入 cookie');
-    }
-    let fetched;
-    try {
-      fetched = await fetchHistory({
-        cookie,
-        windowFrom: window.from,
-        windowTo: window.to,
-        pageSize: cfg.bili.page_size,
-        intervalMs: cfg.bili.request_interval_ms,
-        maxPages: cfg.bili.max_pages,
-        signal: options.signal
-      });
-    } catch (error) {
-      throw new Error('拉取观看历史失败：' + (error?.message ?? String(error)));
-    }
-    const intention = state.intention
-      ? {
-          id: state.intention.id,
-          text: state.intention.text,
-          created_at: state.intention.created_at,
-          days_since_set: daysSinceSet(state.intention, now)
-        }
-      : null;
-    const facts = computeFacts({
-      items: fetched.items,
-      window: { from: window.from, to: window.to, mode, window_mode: windowMode, label: window.label },
-      timeZone: zone,
-      intention,
-      runs: state.runs
-    });
-    const evidence = pickEvidence(fetched.items, cfg.report.evidence_limit, zone);
-    const run = {
-      id: makeId('run'),
-      created_at: new Date(now).toISOString(),
-      // manual：设置页「立即统计一次」或工具调用；schedule：定时触发。跳过判定只认 schedule。
-      trigger: options.trigger === 'schedule' ? 'schedule' : 'manual',
-      window: facts.window,
-      total_items: facts.total_items,
-      shape: facts.behavior_shape.shape,
-      confidence: facts.behavior_shape.confidence,
-      pages: fetched.pages.length,
-      facts,
-      evidence
-    };
-    recordRun(state, run);
-    saveState(stateDir, state);
-    return { run, facts, evidence, state };
-  }
+  /** 采集：拉历史 → 算 facts → 记账。见 services/collect.js。 */
+  const collectRun = (options = {}) =>
+    collectRunImpl(options, { stateDir, getConfig: () => cfg, readerCredentials });
 
   function requireRun(state, runId) {
     if (runId) {
@@ -216,144 +148,17 @@ export function apply(ctx, config) {
     return undefined;
   }
 
-  /** 模型配置指纹：换了模型或提示词就重新生成，否则复用上次结果。 */
-  function reportStamp() {
-    return [cfg.llm.provider, cfg.llm.model, String(cfg.llm.report_prompt ?? '').slice(0, 60)].join('|');
-  }
+  /** 报告渲染：模板正文 + 模型写的观看状态、概览与计划情况。见 services/render.js。 */
+  const renderReport = (run, hypotheses, options = {}) =>
+    renderReportImpl(run, hypotheses, options, { stateDir, getConfig: () => cfg, getLlm: llmService });
 
-  /**
-   * 报告渲染：模板正文（数字全部来自统计）+ 模型写的概览与计划情况。
-   * 模型失败就等于没有这两节，报告本身不降级；同一份统计的成功结果会缓存到 run 上，避免重复调用。
-   */
-  async function renderReport(run, hypotheses, options = {}) {
-    if (!run.facts) throw new Error('这条统计记录缺少 facts，请重新调用 bili_intent_facts');
-    const now = Date.now();
-    const state = loadState(stateDir);
-    const stored = state.runs.find((entry) => entry.id === run.id) ?? null;
-    // 之前用过的观看状态名：给模型做连续性参考，同一个状态别每次换说法。
-    const knownShapes = [];
-    for (const entry of state.runs) {
-      if (entry.id === run.id) continue;
-      const label = entry?.generated?.shape?.label;
-      if (typeof label !== 'string') continue;
-      const clean = label.trim();
-      if (clean.length > 0 && !knownShapes.includes(clean)) knownShapes.push(clean);
-      if (knownShapes.length >= 3) break;
-    }
-    const rawCached = !options.refresh && stored?.generated && stored.generated.stamp === reportStamp() ? stored.generated : null;
-    // 旧版本解析失败时会把整段 JSON 当概览写进缓存：这种缓存作废，重新生成一次。
-    const dirtyOverview = rawCached && typeof rawCached.overview === 'string' && /^\s*\{/.test(rawCached.overview);
-    const cached = dirtyOverview ? null : rawCached;
-    let narrative = null;
-    let shape = null;
-    let generated = [];
-    let polish = { ok: false, reason: 'disabled', message: null };
-    if (cached) {
-      narrative = typeof cached.overview === 'string' ? cached.overview : null;
-      generated = Array.isArray(cached.hypotheses) ? cached.hypotheses : [];
-      if (cached.shape && typeof cached.shape.label === 'string' && cached.shape.label.trim().length > 0) {
-        shape = { label: cached.shape.label.trim(), reason: typeof cached.shape.reason === 'string' ? cached.shape.reason : null };
-      }
-      polish = { ok: true, reason: null, message: null, cached: true };
-    }
-    // 早期缓存里没有模型起的观看状态名：当成缓存不完整，补调一次模型；失败就继续用缓存里的概览与计划情况。
-    const needShape = Boolean(cached) && shape === null && cfg.report.polish;
-    if ((!cached || needShape) && cfg.report.polish) {
-      const template = renderMarkdown(run.facts, { hypotheses, now, timeZone: zone });
-      const fresh = await polishReport({
-        llm: llmService(),
-        config: cfg,
-        facts: run.facts,
-        evidence: Array.isArray(run.evidence) ? run.evidence : [],
-        hypotheses,
-        markdown: template,
-        knownShapes,
-        signal: options.signal
-      });
-      if (fresh.ok) {
-        polish = fresh;
-        narrative = fresh.text;
-        generated = Array.isArray(fresh.hypotheses) ? fresh.hypotheses : [];
-        if (typeof fresh.shape === 'string' && fresh.shape.trim().length > 0) {
-          shape = {
-            label: fresh.shape.trim(),
-            reason: typeof fresh.shape_reason === 'string' && fresh.shape_reason.trim().length > 0 ? fresh.shape_reason.trim() : null
-          };
-        }
-        if (stored) {
-          stored.generated = {
-            stamp: reportStamp(),
-            at: new Date(now).toISOString(),
-            overview: narrative,
-            shape,
-            hypotheses: generated
-          };
-          saveState(stateDir, state);
-        }
-      } else if (!cached) {
-        polish = fresh;
-      }
-    }
-    const used = generated.length > 0 ? generated : hypotheses;
-    const paths = cfg.report.save_local
-      ? saveReport({
-          dir: cfg.report.local_dir,
-          format: cfg.report.format,
-          facts: run.facts,
-          hypotheses: used,
-          narrative,
-          shape,
-          now,
-          timeZone: zone
-        })
-      : [];
-    const summary = buildSummary(run.facts, { maxChars: cfg.notify.summary_max_chars });
-    return {
-      paths,
-      summary,
-      narrative,
-      hypotheses: used,
-      hypotheses_source: generated.length > 0 ? 'model' : 'saved',
-      shape_label: shape?.label ?? null,
-      shape_reason: shape?.reason ?? null,
-      shape_source: shape ? 'model' : 'rule',
-      polished: polish.ok,
-      polish_reason: polish.reason ?? null,
-      polish_message: polish.message ?? null,
-      cached: Boolean(cached)
-    };
-  }
+  /** 私信文案：模板摘要 + 模型按 dm_prompt 改写语气。见 services/render.js。 */
+  const composeDm = (facts, options = {}) =>
+    composeDmImpl(facts, options, { getConfig: () => cfg, getLlm: llmService });
 
-  /**
-   * 私信正文：模板摘要给出硬事实，模型按 llm.dm_prompt 改写语气。
-   * 模型失败就用模板，绝不发空消息。
-   */
-  async function composeDm(facts, { maxChars = cfg.notify.summary_max_chars, signal, shapeLabel = '' } = {}) {
-    const template = facts ? buildSummary(facts, { maxChars, shapeLabel }) : '今天没有新的观看记录。';
-    if (!facts) return { text: template, polished: false, reason: 'no-facts', message: null };
-    const result = await polishDm({ llm: llmService(), config: cfg, facts, summary: template, maxChars, shapeLabel, signal });
-    if (!result.ok) {
-      return { text: template, polished: false, reason: result.reason ?? 'unknown', message: result.message ?? null };
-    }
-    return { text: result.text, polished: true, reason: null, message: null, provider: result.provider, model: result.model };
-  }
-
-  /**
-   * 邮件附件：只有显式开启 attach_report、且渠道里确实有 email 时才准备。
-   * 附件就是这份 Markdown 报告本身，不含原始观看记录，也不含任何凭据。
-   */
-  function emailAttachment(facts, hypotheses = [], narrative = null, shape = null) {
-    if (!cfg.notify.channels.includes('email')) return null;
-    if (cfg.notify.email.attach_report !== true) return null;
-    if (!facts) return null;
-    try {
-      const content = renderMarkdown(facts, { hypotheses, narrative, shape, timeZone: zone });
-      const stamp = formatLocal(Date.now(), zone).slice(0, 10);
-      return { filename: 'bili-watch-' + stamp + '.md', content };
-    } catch {
-      return null;
-    }
-  }
+  /** 邮件附件：仅在 attach_report 开启且渠道含 email 时准备。见 services/render.js。 */
+  const emailAttachment = (facts, hypotheses = [], narrative = null, shape = null) =>
+    emailAttachmentImpl(facts, hypotheses, narrative, shape, { getConfig: () => cfg });
 
   /** 定时规则快照：cron 留空时按周期给默认值，设置页据此显示"生效值"。 */
   function scheduleSnapshot() {
@@ -756,186 +561,26 @@ export function apply(ctx, config) {
    * 设置页接口实现：全部复用工具里的同一套函数（登录、统计、报告、私信），
    * 这样设置页与工具不会出现两套口径。
    */
-  const apiHandlers = {
-    status: async () => statusSnapshot(),
-
-    models: async () => {
-      const llm = llmService();
-      if (!llm) return { providers: [], models: {}, current: { provider: cfg.llm.provider, model: cfg.llm.model }, error: '宿主没有 llm 服务' };
-      const providers =
-        typeof llm.listProviders === 'function'
-          ? llm.listProviders().map((p) => ({ id: String(p.id), name: String(p.name ?? p.id) }))
-          : [];
-      const models = {};
-      for (const provider of providers) {
-        try {
-          const list = await llm.listModels(provider.id);
-          models[provider.id] = (Array.isArray(list) ? list : []).map((m) => ({ id: String(m.id), name: String(m.name ?? m.id) }));
-        } catch {
-          models[provider.id] = [];
-        }
-      }
-      return { providers, models, current: { provider: cfg.llm.provider, model: cfg.llm.model } };
-    },
-
-    configGet: async () => ({
-      llm: { ...cfg.llm },
-      report: {
-        polish: cfg.report.polish,
-        save_local: cfg.report.save_local,
-        format: cfg.report.format,
-        local_dir: expandHome(cfg.report.local_dir),
-        default_dir: expandHome(DEFAULT_REPORT_DIR),
-        dir_options: dirOptions()
-      },
-      notify: {
-        channels: [...cfg.notify.channels],
-        summary_max_chars: cfg.notify.summary_max_chars,
-        receiver_mid: String(cfg.notify.bili_dm.receiver_mid ?? ''),
-        effective_receiver: String(effectiveNotifyConfig().bili_dm.receiver_mid ?? ''),
-        receiver_source: effectiveNotifyConfig().bili_dm.receiver_source ?? null,
-        email: {
-          host: cfg.notify.email.host,
-          port: cfg.notify.email.port,
-          secure: cfg.notify.email.secure,
-          user: cfg.notify.email.user,
-          pass_set: cfg.notify.email.pass.length > 0,
-          from: cfg.notify.email.from,
-          to: cfg.notify.email.to,
-          from_name: cfg.notify.email.from_name,
-          subject_prefix: cfg.notify.email.subject_prefix,
-          attach_report: cfg.notify.email.attach_report,
-          allow_plain: cfg.notify.email.allow_plain,
-          timeout_ms: cfg.notify.email.timeout_ms,
-          retries: cfg.notify.email.retries,
-          backoff_ms: cfg.notify.email.backoff_ms
-        }
-      },
-      defaults: { report_prompt: DEFAULT_REPORT_PROMPT, dm_prompt: DEFAULT_DM_PROMPT },
-      schedule: scheduleSnapshot(),
-      overrides,
-      settings_file: settingsFile(stateDir),
-      model_ready: modelTarget(cfg) !== null
-    }),
-
-    dirCheck: async ({ value }) => checkDir(value),
-
-    configSet: async ({ patch }) => {
-      const { patch: clean, rejected } = pickEditable(patch);
-      if (Object.keys(clean).length === 0) {
-        throw new Error('没有可写入的字段' + (rejected.length > 0 ? '：' + rejected.join('、') : ''));
-      }
-      const saved = saveOverrides(stateDir, clean);
-      reloadConfig();
-      if ('schedule' in clean) {
-        armScheduler();
-        log('info', '定时规则已更新：' + cfg.schedule.mode + ' / ' + cfg.schedule.window + ' / ' + (cfg.schedule.cron || defaultCronFor(cfg.schedule.mode)));
-      }
-      return {
-        applied: clean,
-        rejected,
-        overrides: saved,
-        effective: {
-          llm: { ...cfg.llm },
-          report_polish: cfg.report.polish,
-          report: {
-            save_local: cfg.report.save_local,
-            format: cfg.report.format,
-            local_dir: expandHome(cfg.report.local_dir)
-          },
-          channels: [...cfg.notify.channels],
-          summary_max_chars: cfg.notify.summary_max_chars,
-          email: {
-            host: cfg.notify.email.host,
-            port: cfg.notify.email.port,
-            secure: cfg.notify.email.secure,
-            from: cfg.notify.email.from,
-            to: cfg.notify.email.to,
-            attach_report: cfg.notify.email.attach_report,
-            configured: Boolean(cfg.notify.email.host && cfg.notify.email.from && cfg.notify.email.to)
-          },
-          receiver_mid: String(cfg.notify.bili_dm.receiver_mid ?? ''),
-          effective_receiver: String(effectiveNotifyConfig().bili_dm.receiver_mid ?? ''),
-          receiver_source: effectiveNotifyConfig().bili_dm.receiver_source ?? null,
-          schedule: scheduleSnapshot(),
-          model_ready: modelTarget(cfg) !== null
-        }
-      };
-    },
-
-    intentGet: async () => {
-      const state = loadState(stateDir);
-      return {
-        intention: state.intention
-          ? { text: state.intention.text, created_at: state.intention.created_at, days_since_set: daysSinceSet(state.intention) }
-          : null
-      };
-    },
-
-    intentSet: async ({ text }) => {
-      const clean = String(text ?? '').trim();
-      if (clean.length === 0) throw new Error('计划不能为空');
-      const state = loadState(stateDir);
-      const intention = setIntention(state, clean, { source: 'settings' });
-      saveState(stateDir, state);
-      return { intention };
-    },
-
-    loginStart: async ({ role, channel }) => startLogin(role, { channel }),
-
-    loginPoll: async ({ qrcodeKey, waitSeconds }) => pollLogin({ qrcodeKey, waitSeconds: waitSeconds ?? 0 }),
-
-    loginLogout: async ({ role }) => {
-      const who = role === 'sender' ? 'sender' : 'reader';
-      const creds = loadCreds(stateDir);
-      saveCreds(stateDir, { ...creds, [who]: null, pending: null });
-      return { role: who, logged_out: true, login: describeLoginSlot(who) };
-    },
-
-    runNow: async ({ mode, window: windowArg }) => {
-      const { run, facts } = await collectRun({ mode: mode || undefined, window: windowArg || undefined });
-      const state = loadState(stateDir);
-      const hypotheses = state.hypotheses.filter((h) => h.run_id === run.id);
-      const rendered = await renderReport(run, hypotheses);
-      return {
-        run_id: run.id,
-        total_items: facts.total_items,
-        shape: run.shape,
-        shape_label: rendered.shape_label,
-        shape_source: rendered.shape_source,
-        confidence: run.confidence,
-        hypotheses_count: rendered.hypotheses.length,
-        hypotheses_source: rendered.hypotheses_source,
-        paths: rendered.paths,
-        summary: rendered.summary,
-        narrative: rendered.narrative,
-        polished: rendered.polished,
-        polish_reason: rendered.polish_reason,
-        polish_message: rendered.polish_message
-      };
-    },
-
-    notifyTest: (payload) => runNotifyTest(payload ?? {}),
-
-    /** 设置页的「发送测试邮件」：只走邮件渠道，其它渠道一概不碰。 */
-    emailTest: (payload) => runNotifyTest({ ...(payload ?? {}), only: 'email' }),
-
-    reportLatest: async () => {
-      const state = loadState(stateDir);
-      const run = state.runs[0] ?? null;
-      if (!run) return { run: null };
-      const saved = state.hypotheses.filter((h) => h.run_id === run.id);
-      const hypotheses = Array.isArray(run.generated?.hypotheses) && run.generated.hypotheses.length > 0 ? run.generated.hypotheses : saved;
-      const shape = run.generated?.shape ?? null;
-      const markdown = renderMarkdown(run.facts, { hypotheses, narrative: run.generated?.overview ?? null, shape, timeZone: zone });
-      return {
-        run: { id: run.id, created_at: run.created_at, total_items: run.total_items, shape: run.shape, shape_label: shape?.label ?? null },
-        summary: buildSummary(run.facts, { maxChars: cfg.notify.summary_max_chars }),
-        markdown_preview: markdown.slice(0, 1500),
-        report_dir: expandHome(cfg.report.local_dir)
-      };
-    }
-  };
+  const apiHandlers = createHandlers({
+    stateDir,
+    getConfig: () => cfg,
+    getOverrides: () => overrides,
+    reloadConfig,
+    armScheduler,
+    log,
+    statusSnapshot,
+    scheduleSnapshot,
+    llmService,
+    effectiveNotifyConfig,
+    describeLoginSlot,
+    startLogin,
+    pollLogin,
+    collectRun,
+    renderReport,
+    runNotifyTest,
+    dirOptions,
+    checkDir
+  });
 
   /** 把设置页接口挂到宿主 webServer；没有该服务（例如纯终端环境）时只记一条日志。 */
   function mountApi(scope) {

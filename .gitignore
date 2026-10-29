@@ -4,4 +4,5 @@ node_modules/
 .DS_Store
 
 # 内部目录：不随仓库发布
+test/
 doc/

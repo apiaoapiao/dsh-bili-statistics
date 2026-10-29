@@ -3,7 +3,7 @@ import path from 'node:path';
 import { expandHome, readJsonSafe, writeJsonAtomic, clone } from './util.js';
 
 const DEFAULT_STATE = {
-  version: 1,
+  version: 2,
   intention: null,
   intention_history: [],
   runs: [],
@@ -12,6 +12,42 @@ const DEFAULT_STATE = {
   notify: { last_sent_at: null, last_channel: null, last_report_id: null },
   schedule_log: []
 };
+
+/** 当前状态文件版本。加字段不需要升版本（loadState 会逐字段兜底）；改字段语义或类型才升。 */
+const CURRENT_VERSION = 2;
+
+/**
+ * 版本迁移链：键是「从哪个版本升上来」，函数把旧状态就地补齐到下一版。
+ * 加新版本时 CURRENT_VERSION 加一，并在这里补一条 MIGRATIONS[旧版本]。
+ * 迁移只做幂等的字段补齐，不删字段——旧版本遗留的字段留着不影响读取。
+ */
+const MIGRATIONS = {
+  // v1 → v2：给每条 run 补 generated（模型写的观看状态名、概览与计划情况）与 trigger（manual / schedule）。
+  1: (state) => {
+    for (const run of Array.isArray(state.runs) ? state.runs : []) {
+      if (!run || typeof run !== 'object') continue;
+      if (run.generated === undefined) run.generated = null;
+      if (run.trigger !== 'schedule' && run.trigger !== 'manual') run.trigger = 'manual';
+    }
+  }
+};
+
+/** 按版本号逐级迁移；比当前代码新的状态原样返回，不降级改写（避免旧代码吃掉新字段）。 */
+export function migrateState(state) {
+  let version = Number.isInteger(state.version) && state.version > 0 ? state.version : 1;
+  if (version > CURRENT_VERSION) return state;
+  while (version < CURRENT_VERSION) {
+    const step = MIGRATIONS[version];
+    if (typeof step !== 'function') {
+      version = CURRENT_VERSION;
+      break;
+    }
+    step(state);
+    version += 1;
+  }
+  state.version = CURRENT_VERSION;
+  return state;
+}
 
 export function stateFile(dir) {
   return path.join(expandHome(dir), 'state.json');
@@ -27,7 +63,7 @@ export function loadState(dir) {
   if (!Array.isArray(merged.feedback)) merged.feedback = [];
   if (!merged.notify || typeof merged.notify !== 'object') merged.notify = clone(DEFAULT_STATE.notify);
   if (!Array.isArray(merged.schedule_log)) merged.schedule_log = [];
-  return merged;
+  return migrateState(merged);
 }
 
 export function saveState(dir, state) {
