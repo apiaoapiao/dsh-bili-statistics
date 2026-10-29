@@ -5,6 +5,7 @@
 <p align="center"><sub>No runtime dependencies · QR sign-in · Local Markdown/HTML reports · DM &amp; email digests · Model-written overview and plan status</sub></p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/dsh-bili-statistics"><img src="https://img.shields.io/npm/v/dsh-bili-statistics?style=flat-square" alt="npm version"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="license"></a>
   <a href="https://github.com/apiaoapiao/dsh-bili-statistics"><img src="https://img.shields.io/badge/GitHub-apiaoapiao%2Fdsh--bili--statistics-181717?style=flat-square&logo=github" alt="GitHub"></a>
 </p>

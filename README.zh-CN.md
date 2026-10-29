@@ -5,6 +5,7 @@
 <p align="center"><sub>零运行时依赖 · 扫码登录 · 本地 Markdown/HTML 报告 · 私信与邮件摘要 · 模型写概览与计划情况</sub></p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/dsh-bili-statistics"><img src="https://img.shields.io/npm/v/dsh-bili-statistics?style=flat-square" alt="npm 版本"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="license"></a>
   <a href="https://github.com/apiaoapiao/dsh-bili-statistics"><img src="https://img.shields.io/badge/GitHub-apiaoapiao%2Fdsh--bili--statistics-181717?style=flat-square&logo=github" alt="GitHub"></a>
 </p>
