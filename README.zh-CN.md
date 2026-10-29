@@ -32,9 +32,11 @@
 ## 安装
 
 ```bash
-git clone https://github.com/apiaoapiao/dsh-bili-statistics.git
+# 从 npm 安装（推荐）
+dsh plugin --profile web add dsh-bili-statistics
 
-# 装进 web profile（本地目录不需要联网，加 --offline 更快）
+# 或者从本地源码安装（要改代码时用；本地目录不需要联网，加 --offline 更快）
+git clone https://github.com/apiaoapiao/dsh-bili-statistics.git
 dsh plugin --profile web add 'file:/path/to/dsh-bili-statistics' --offline
 ```
 

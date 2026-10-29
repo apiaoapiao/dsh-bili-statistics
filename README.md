@@ -33,9 +33,12 @@ It reads **your own** watch history from Bilibili's official API, computes a set
 ## Install
 
 ```bash
-git clone https://github.com/apiaoapiao/dsh-bili-statistics.git
+# from npm (recommended)
+dsh plugin --profile web add dsh-bili-statistics
 
-# install into the web profile (a local directory needs no network; --offline is faster)
+# or from a local checkout, when you want to change the code
+# (a local directory needs no network; --offline is faster)
+git clone https://github.com/apiaoapiao/dsh-bili-statistics.git
 dsh plugin --profile web add 'file:/path/to/dsh-bili-statistics' --offline
 ```
 

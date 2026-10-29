@@ -108,7 +108,7 @@ async function loadClient() {
   await import(new URL("../src/client.js", import.meta.url).href);
   assert.equal(bundles.length, 1, "客户端 bundle 应注册一次");
   const bundle = bundles[0];
-  assert.equal(bundle.id, "@local/dsh-bili-statistics");
+  assert.equal(bundle.id, "dsh-bili-statistics");
   const factory = bundle.factory;
   const module = factory((request) => {
     if (request === "react") return fakeReact();

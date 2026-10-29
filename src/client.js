@@ -9,7 +9,7 @@
  * 
  */
 window.__ModuleLoader__.load({
-  id: '@local/dsh-bili-statistics',
+  id: 'dsh-bili-statistics',
   factory(require) {
     const React = require('react');
     const h = React.createElement;

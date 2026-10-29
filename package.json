@@ -1,10 +1,31 @@
 {
-  "name": "@local/dsh-bili-statistics",
+  "name": "dsh-bili-statistics",
   "version": "0.1.0",
-  "private": true,
   "license": "MIT",
   "description": "B 站观看统计：拉取观看历史、算出观看状态，让模型照视频标题写概览与计划完成情况，并可私信或邮件推送到自己。",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apiaoapiao/dsh-bili-statistics.git"
+  },
+  "homepage": "https://github.com/apiaoapiao/dsh-bili-statistics#readme",
+  "bugs": {
+    "url": "https://github.com/apiaoapiao/dsh-bili-statistics/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "bilibili",
+    "watch-history",
+    "statistics",
+    "plugin"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": "./src/index.js",
     "./client": "./src/client.js",

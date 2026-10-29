@@ -2,7 +2,7 @@
 # 配置项全部可在此处覆盖，用户的这一层会保留到升级之后。
 - insert:
     - id: bili-statistics
-      name: '@local/dsh-bili-statistics'
+      name: 'dsh-bili-statistics'
       config:
         report:
           save_local: true
