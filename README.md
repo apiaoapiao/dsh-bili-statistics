@@ -209,6 +209,8 @@ state_dir: ~/.dsh/bili-statistics
 
 纯 ESM，没有构建步骤，也没有第三方运行时依赖——二维码编码器与 SMTP 客户端都是自带实现（只用 Node 内置模块）。宿主侧提供工具、状态与定时，浏览器侧提供会话卡片与设置页。
 
+源码按职责分层：`src/domain`（统计与渲染，纯函数）、`src/adapters`（B 站接口与 SMTP）、`src/core`（状态、凭据、配置）、`src/services`（模型调用、通知）、`src/tools` 与 `src/transport`（工具定义、设置页接口）、`src/index.js`（只做编排）。
+
 ## 许可
 
 尚未声明开源许可证。在补充 LICENSE 之前，默认保留所有权利。

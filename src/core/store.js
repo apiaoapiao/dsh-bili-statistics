@@ -7,11 +7,10 @@
 import path from 'node:path';
 import { expandHome, ensureDir, isPlainObject, deepMerge, readJsonSafe, writeJsonAtomic, clamp } from './util.js';
 import { SCHEDULE_MODES, WINDOW_MODES, parseCron } from '../domain/time.js';
+import { NOTIFY_CHANNELS } from '../config/defaults.js';
 
 const TEXT_LIMIT = 4000;
 
-/** 支持的推送渠道（与 index.js 共用一份定义）。 */
-export const NOTIFY_CHANNELS = ['bili_dm', 'email'];
 
 const REPORT_FORMATS = ['markdown', 'html', 'both'];
 
