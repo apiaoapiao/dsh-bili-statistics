@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
-import { sendMail, buildMessage, encodeHeader, SmtpError } from '../src/smtp.js';
+import { sendMail, buildMessage, encodeHeader, SmtpError } from '../src/adapters/smtp.js';
 
 const CRLF = '\r\n';
 

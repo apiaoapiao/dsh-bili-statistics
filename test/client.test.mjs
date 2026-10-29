@@ -288,7 +288,7 @@ test("缺翻译不炸：t 抛错时退回内置英文兜底", async () => {
   assert.ok(textOf(tree).includes("少刷游戏区"));
 });
 test("扫码登录卡片画出二维码并给出链接兜底", async () => {
-  const { encodeQr, toDots } = await import("../src/qr.js");
+  const { encodeQr, toDots } = await import("../src/core/qr.js");
   const module = await loadClient();
   const { registered, dictionaries } = fakeContext(module);
   const card = registered.find((entry) => entry.spec.key === "bili_intent_login").component;

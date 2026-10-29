@@ -1,5 +1,5 @@
 /** B 站接口访问层：观看历史分页、帐号 uid 探测。所有网络调用可注入，便于离线测试。 */
-import { realSleep } from './util.js';
+import { realSleep } from '../core/util.js';
 
 const HISTORY_URL = 'https://api.bilibili.com/x/web-interface/history/cursor';
 const NAV_URL = 'https://api.bilibili.com/x/web-interface/nav';

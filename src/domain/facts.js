@@ -1,5 +1,5 @@
 /** 纯函数统计层：把观看历史条目压成可核验的 StatisticalFacts。不访问网络、不读文件。 */
-import { median, ratio, round } from './util.js';
+import { median, ratio, round } from '../core/util.js';
 import { localParts } from './time.js';
 
 export const PASSIVE_COMPLETION = 0.25;

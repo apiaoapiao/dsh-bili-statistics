@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { encodeQr, toDots } from '../src/qr.js';
+import { encodeQr, toDots } from '../src/core/qr.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const golden = JSON.parse(fs.readFileSync(path.join(here, 'fixtures', 'qr-golden.json'), 'utf8'));

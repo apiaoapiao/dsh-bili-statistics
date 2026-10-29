@@ -7,7 +7,7 @@
 import net from 'node:net';
 import tls from 'node:tls';
 import crypto from 'node:crypto';
-import { realSleep } from './util.js';
+import { realSleep } from '../core/util.js';
 
 const CRLF = '\r\n';
 const CRLF_BUFFER = Buffer.from(CRLF);

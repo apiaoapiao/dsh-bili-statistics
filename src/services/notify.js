@@ -1,6 +1,6 @@
 /** 通知投递：B 站私信与邮件。全部可注入 fetch/sleep/connect，便于离线测试。 */
-import { realSleep } from './util.js';
-import { sendMail } from './smtp.js';
+import { realSleep } from '../core/util.js';
+import { sendMail } from '../adapters/smtp.js';
 
 const IM_URL = 'https://api.vc.bilibili.com/web_im/v1/web_im/send_msg';
 

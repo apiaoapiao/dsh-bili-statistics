@@ -3,14 +3,14 @@
  * 职责：注册 bili_intent_* 工具、按配置定时统计、把统计事实与计划情况落盘并投递私信。
  * 报告里的概览与计划情况由插件自己调用宿主 LLM 生成（可在设置页关闭），会话里的模型也可以用 annotate 覆盖。
  */
-import { computeFacts } from './facts.js';
-import { fetchHistory, buildCookieHeader } from './bili.js';
-import { resolveWindow, formatLocal, nextCronFire, defaultCronFor, SCHEDULE_MODES, WINDOW_MODES } from './time.js';
-import { saveReport, buildSummary, renderMarkdown } from './report.js';
-import { polishReport, polishDm, modelTarget, DEFAULT_REPORT_PROMPT, DEFAULT_DM_PROMPT } from './polish.js';
-import { registerApi, API_PREFIX } from './api.js';
-import { loadOverrides, saveOverrides, settingsFile, pickEditable, NOTIFY_CHANNELS } from './store.js';
-import { deliverAll } from './notify.js';
+import { computeFacts } from './domain/facts.js';
+import { fetchHistory, buildCookieHeader } from './adapters/bili.js';
+import { resolveWindow, formatLocal, nextCronFire, defaultCronFor, SCHEDULE_MODES, WINDOW_MODES } from './domain/time.js';
+import { saveReport, buildSummary, renderMarkdown } from './domain/report.js';
+import { polishReport, polishDm, modelTarget, DEFAULT_REPORT_PROMPT, DEFAULT_DM_PROMPT } from './services/polish.js';
+import { registerApi, API_PREFIX } from './transport/api.js';
+import { loadOverrides, saveOverrides, settingsFile, pickEditable, NOTIFY_CHANNELS } from './core/store.js';
+import { deliverAll } from './services/notify.js';
 import {
   loadState,
   saveState,
@@ -22,14 +22,14 @@ import {
   markNotified,
   recordScheduleEvent,
   makeId
-} from './state.js';
-import { expandHome, truncate, pct, isPlainObject, deepMerge } from './util.js';
+} from './core/state.js';
+import { expandHome, truncate, pct, isPlainObject, deepMerge } from './core/util.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { encodeQr, toDots, ECC } from './qr.js';
-import { generateQr, pollQr, generateTvQr, pollTvQr, fetchNav, buildCookie as buildLoginCookie } from './bili-login.js';
-import { loadCreds, saveCreds, setRoleCreds, setPending, clearPending, setChannel, cookieFrom, describeLogin, ROLES } from './creds.js';
+import { encodeQr, toDots, ECC } from './core/qr.js';
+import { generateQr, pollQr, generateTvQr, pollTvQr, fetchNav, buildCookie as buildLoginCookie } from './adapters/bili-login.js';
+import { loadCreds, saveCreds, setRoleCreds, setPending, clearPending, setChannel, cookieFrom, describeLogin, ROLES } from './core/creds.js';
 
 const DEFAULT_CONFIG = {
   bili: { sessdata: '', bili_jct: '', cookie: '', page_size: 30, request_interval_ms: 400, max_pages: 40 },

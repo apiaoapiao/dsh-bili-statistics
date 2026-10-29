@@ -1,6 +1,6 @@
 /** 报告渲染与落盘：Markdown / 独立 HTML，以及通知用的短摘要。 */
 import path from 'node:path';
-import { expandHome, ensureDir, pct, truncate, writeText, humanDuration } from './util.js';
+import { expandHome, ensureDir, pct, truncate, writeText, humanDuration } from '../core/util.js';
 import { formatLocal, isoWeek, localParts } from './time.js';
 
 const SHAPE_LABEL = {

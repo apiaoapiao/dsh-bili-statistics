@@ -85,7 +85,7 @@ function makeHarness(services = {}) {
 }
 
 const { apply } = await import('../src/index.js');
-const { sendBiliDm } = await import('../src/notify.js');
+const { sendBiliDm } = await import('../src/services/notify.js');
 
 function baseConfig(dir, overrides = {}) {
   return {

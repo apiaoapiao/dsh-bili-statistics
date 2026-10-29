@@ -3,8 +3,8 @@
  * 设计约束：模型只负责叙述与推断，不产生数字；模型不可用 / 失败 / 超时一律返回 ok=false，
  * 由调用方回退到模板文案，绝不因为模型问题而丢掉报告或通知。
  */
-import { pct } from './util.js';
-import { SHAPE_LABEL } from './report.js';
+import { pct } from '../core/util.js';
+import { SHAPE_LABEL } from '../domain/report.js';
 
 /** 报告概览 + 计划完成情况的默认系统提示词。数字必须来自输入，推断必须标注。 */
 export const DEFAULT_REPORT_PROMPT = [

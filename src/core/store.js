@@ -6,7 +6,7 @@
  */
 import path from 'node:path';
 import { expandHome, ensureDir, isPlainObject, deepMerge, readJsonSafe, writeJsonAtomic, clamp } from './util.js';
-import { SCHEDULE_MODES, WINDOW_MODES, parseCron } from './time.js';
+import { SCHEDULE_MODES, WINDOW_MODES, parseCron } from '../domain/time.js';
 
 const TEXT_LIMIT = 4000;
 
