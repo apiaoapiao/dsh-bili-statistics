@@ -1,6 +1,6 @@
 {
   "name": "dsh-bili-statistics",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "B 站观看统计：拉取观看历史、算出观看状态，让模型照视频标题写概览与计划完成情况，并可私信或邮件推送到自己。",
   "type": "module",
