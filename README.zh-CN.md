@@ -36,9 +36,9 @@
 # 从 npm 安装（推荐）
 dsh plugin --profile web add dsh-bili-statistics
 
-# 或者从本地源码安装（要改代码时用；本地目录不需要联网，加 --offline 更快）
+# 或者从本地源码安装
 git clone https://github.com/apiaoapiao/dsh-bili-statistics.git
-dsh plugin --profile web add 'file:/path/to/dsh-bili-statistics' --offline
+dsh plugin --profile web add 'file:/path/to/dsh-bili-statistics'
 ```
 
 包内自带默认配置，装好即可用。之后刷新 GUI 页面，工具、卡片与设置页就会出现。改过 `src/*.js` 之后需要重启 `dsh web`，ESM 已缓存的旧实现不会热替换。

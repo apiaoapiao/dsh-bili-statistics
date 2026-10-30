@@ -38,9 +38,8 @@ It reads **your own** watch history from Bilibili's official API, computes a set
 dsh plugin --profile web add dsh-bili-statistics
 
 # or from a local checkout, when you want to change the code
-# (a local directory needs no network; --offline is faster)
 git clone https://github.com/apiaoapiao/dsh-bili-statistics.git
-dsh plugin --profile web add 'file:/path/to/dsh-bili-statistics' --offline
+dsh plugin --profile web add 'file:/path/to/dsh-bili-statistics'
 ```
 
 The package ships with defaults, so it works right after install. Refresh the GUI page and the tools, cards and settings page appear. Once you edit `src/*.js`, restart `dsh web` — the ESM loader caches the old implementation and will not hot-replace it.
