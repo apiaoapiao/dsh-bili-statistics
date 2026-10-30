@@ -14,7 +14,17 @@ export const NOTIFY_CHANNELS = ['bili_dm', 'email'];
 export const TONE_WORDS = ['自律', '意志力', '懒惰', '放纵', '戒掉', '建议你', '应该少'];
 
 const DEFAULT_CONFIG = {
-  bili: { sessdata: '', bili_jct: '', cookie: '', page_size: 30, request_interval_ms: 400, max_pages: 40 },
+  bili: {
+    sessdata: '',
+    bili_jct: '',
+    cookie: '',
+    page_size: 30,
+    request_interval_ms: 400,
+    max_pages: 40,
+    // 互动数据（点赞 / 投币 / 收藏）要逐条查视频关系，条数越多越慢
+    interactions: true,
+    interaction_max: 200
+  },
   schedule: { enabled: true, mode: 'daily', window: 'calendar', cron: '', timezone: 'Asia/Shanghai', custom_from: '', custom_to: '' },
   report: { save_local: true, local_dir: '~/.dsh/bili-statistics/reports', format: 'markdown', evidence_limit: 20, polish: true },
   llm: { enabled: true, provider: '', model: '', report_prompt: '', dm_prompt: '', max_tokens: 2000, timeout_ms: 20000 },
@@ -81,6 +91,8 @@ export function normalizeConfig(raw) {
   cfg.bili.page_size = clampInt(cfg.bili.page_size, 1, 30, 30);
   cfg.bili.request_interval_ms = clampInt(cfg.bili.request_interval_ms, 0, 10000, 400);
   cfg.bili.max_pages = clampInt(cfg.bili.max_pages, 1, 60, 40);
+  cfg.bili.interactions = cfg.bili.interactions !== false;
+  cfg.bili.interaction_max = clampInt(cfg.bili.interaction_max, 0, 500, 200);
   cfg.report.evidence_limit = clampInt(cfg.report.evidence_limit, 2, 40, 20);
   if (!SCHEDULE_MODES.includes(cfg.schedule.mode)) cfg.schedule.mode = 'daily';
   if (!WINDOW_MODES.includes(cfg.schedule.window)) cfg.schedule.window = 'calendar';

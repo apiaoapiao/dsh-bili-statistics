@@ -55,6 +55,13 @@ window.__ModuleLoader__.load({
         "completion": "平均完成度",
         "lateNight": "深夜占比",
         "chains": "连续自动播放",
+        "likes": "点赞",
+        "coins": "投币",
+        "favorites": "收藏",
+        "live": "直播",
+        "liveSessions": "场",
+        "coinsUnit": "枚",
+        "minutes": "分钟",
         "hypotheses": "计划情况",
     "overview": "概览",
         "evidence": "证据",
@@ -249,6 +256,13 @@ window.__ModuleLoader__.load({
         "completion": "Mean completion",
         "lateNight": "Late-night share",
         "chains": "Longest autoplay run",
+        "likes": "Likes",
+        "coins": "Coins",
+        "favorites": "Favorites",
+        "live": "Live",
+        "liveSessions": "sessions",
+        "coinsUnit": "coins",
+        "minutes": "min",
         "hypotheses": "Plan status",
     "overview": "Overview",
         "evidence": "Evidence",
@@ -710,6 +724,7 @@ window.__ModuleLoader__.load({
         cell(tr('lateNight', 'late-night'), pct(meta.late_night_share)),
         cell(tr('chains', 'binge run'), num(meta.max_chain))
       ];
+      const inter = meta.interactions && typeof meta.interactions === 'object' ? meta.interactions : null;
       const hypotheses = Array.isArray(meta.hypotheses) ? meta.hypotheses : [];
       const items = hypotheses.map((hypothesis, index) => {
         const evidenceCount = Array.isArray(hypothesis.evidence) ? hypothesis.evidence.length : 0;
@@ -743,6 +758,17 @@ window.__ModuleLoader__.load({
       const overview = typeof meta.overview === 'string' ? meta.overview.trim().replace(/\s+/g, ' ') : '';
       const body = [];
       body.push(h('div', { key: 'grid', style: S.grid }, cells));
+      if (inter && inter.enabled !== false) {
+        const coinExtra = inter.coin_total > inter.coins ? String(inter.coin_total) + ' ' + tr('coinsUnit', 'coins') : null;
+        const liveMinutes = Number(inter.live_minutes) || 0;
+        const liveCount = Number(inter.live_count) || 0;
+        body.push(h('div', { key: 'inter', style: S.grid }, [
+          cell(tr('likes', 'likes'), num(inter.likes)),
+          cell(tr('coins', 'coins'), num(inter.coins), coinExtra),
+          cell(tr('favorites', 'favorites'), num(inter.favorites)),
+          cell(tr('live', 'live'), liveMinutes > 0 ? liveMinutes + ' ' + tr('minutes', 'min') : '—', liveCount > 0 ? liveCount + ' ' + tr('liveSessions', 'sessions') : null)
+        ]));
+      }
       if (overview.length > 0) {
         body.push(h('div', { key: 'overview', style: S.overview, title: meta.overview }, tr('overview', 'overview') + '：' + clip(overview, 300)));
       }

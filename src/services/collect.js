@@ -3,6 +3,7 @@
  * 宿主闭包（配置、凭据读取）由调用方传入，本文件不做 ctx 访问。
  */
 import { fetchHistory } from '../adapters/bili.js';
+import { collectInteractions } from './interactions.js';
 import { computeFacts } from '../domain/facts.js';
 import { resolveWindow } from '../domain/time.js';
 import { pickEvidence } from '../core/present.js';
@@ -24,7 +25,7 @@ export async function collectRun(options, { stateDir, getConfig, readerCredentia
     customTo: options.to ?? cfg.schedule.custom_to,
     weeklyAnchorMs: now
   });
-  const { cookie } = readerCredentials();
+  const { cookie, mid } = readerCredentials();
   if (cookie.length === 0) {
     throw new Error('还没有登录 B 站：请先调用 bili_intent_login 扫码登录（role=reader），或在插件配置的 bili.sessdata 里填入 cookie');
   }
@@ -42,6 +43,12 @@ export async function collectRun(options, { stateDir, getConfig, readerCredentia
   } catch (error) {
     throw new Error('拉取观看历史失败：' + (error?.message ?? String(error)));
   }
+  // 互动数据（点赞 / 投币 / 收藏 / 直播）单独采集：失败只降级这一类，不影响观看统计。
+  const interactions = await collectInteractions(
+    fetched.items,
+    { from: window.from, to: window.to },
+    { getConfig, cookie, mid, signal: options.signal }
+  );
   const intention = state.intention
     ? {
         id: state.intention.id,
@@ -55,7 +62,9 @@ export async function collectRun(options, { stateDir, getConfig, readerCredentia
     window: { from: window.from, to: window.to, mode, window_mode: windowMode, label: window.label },
     timeZone: zone,
     intention,
-    runs: state.runs
+    runs: state.runs,
+    interactions,
+    now
   });
   const evidence = pickEvidence(fetched.items, cfg.report.evidence_limit, zone);
   const run = {

@@ -180,6 +180,31 @@ export function classifyShape({ total, repetition, completion, time, chains, ori
   };
 }
 
+const LIVE_SESSION_CAP_SEC = 30 * 60;
+
+/**
+ * 直播观看：历史里的直播条目不返回单场时长（duration/progress 都是 0），
+ * 所以用"这条记录与下一条观看记录的时间差"当作停留时长，单场封顶 30 分钟。
+ * 这是估算值，报告里必须标注：时间差拉到几小时时不可能真看了那么久。
+ */
+export function computeLive(items, now = Date.now()) {
+  let count = 0;
+  let estimatedSec = 0;
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item.business !== 'live') continue;
+    count += 1;
+    const next = items[index + 1];
+    const gapSec = next ? next.ts - item.ts : Math.round(now / 1000) - item.ts;
+    estimatedSec += Math.min(LIVE_SESSION_CAP_SEC, Math.max(0, gapSec));
+  }
+  return {
+    count,
+    estimated_sec: estimatedSec,
+    note: count > 0 ? '直播时长按相邻观看记录的时间差估算（单场封顶 30 分钟），接口不返回单场观看时长' : null
+  };
+}
+
 /** 与历史 run 的中位数比较，样本不足时明确说明拿不到基线。 */
 export function computeBaseline(runs, currentTotal) {
   const totals = runs
@@ -197,7 +222,7 @@ export function computeBaseline(runs, currentTotal) {
 }
 
 /** 汇总入口：items 必须已按 ts 升序。 */
-export function computeFacts({ items, window, timeZone, intention = null, runs = [] }) {
+export function computeFacts({ items, window, timeZone, intention = null, runs = [], interactions = null, now = Date.now() }) {
   const total = items.length;
   const origin = inferOrigin(items);
   const chains = computeChains(items, timeZone);
@@ -207,6 +232,17 @@ export function computeFacts({ items, window, timeZone, intention = null, runs =
   const shape = classifyShape({ total, repetition, completion, time, chains, origin: origin.facts });
   const days = new Set(items.map((item) => localParts(item.ts * 1000, timeZone).day)).size;
   const durations = items.map((item) => item.durationSec).filter((v) => Number.isFinite(v) && v > 0);
+  const live = computeLive(items, now);
+  const base = interactions ?? {
+    enabled: false,
+    likes: { count: 0, videos: [] },
+    coins: { count: 0, total: 0, videos: [] },
+    favorites: { count: 0, source: 'skipped', videos: [] },
+    sampled: { relation: 0, errors: 0, folders: 0 },
+    notes: []
+  };
+  const notes = Array.isArray(base.notes) ? base.notes.slice() : [];
+  if (live.note) notes.push(live.note);
   return {
     window: { from: window.from, to: window.to, mode: window.mode, label: window.label, timezone: timeZone },
     total_items: total,
@@ -218,6 +254,7 @@ export function computeFacts({ items, window, timeZone, intention = null, runs =
     time_distribution: time,
     passive_chain: chains,
     duration: { total_sec: durations.reduce((acc, v) => acc + v, 0), median_sec: round(median(durations), 0) },
+    interactions: { ...base, live, notes },
     baseline: computeBaseline(runs, total),
     intent_anchor: intention
       ? {
@@ -229,7 +266,9 @@ export function computeFacts({ items, window, timeZone, intention = null, runs =
       : null,
     caveats: [
       '接口不返回来源，origin_inferred 与 behavior_shape 是行为推断，不是事实',
-      '完成度依赖条目自带的 duration/progress，缺失时样本会变小'
+      '完成度依赖条目自带的 duration/progress，缺失时样本会变小',
+      '点赞与投币接口不返回动作时间，只能按窗口内看过的视频对照"现在还在不在"，不包含看了没记录的操作',
+      '收藏数取自收藏夹的 fav_time，是收藏动作的时间'
     ]
   };
 }

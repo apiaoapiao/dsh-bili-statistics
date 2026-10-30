@@ -52,6 +52,27 @@ export function reportFileName(facts, now, timeZone, extension) {
   return `${base}.${extension}`;
 }
 
+/** 互动统计行：旧报告（没有 interactions 字段）自动跳过，不会渲染出 undefined。 */
+function interactionsRows(facts) {
+  const inter = facts?.interactions;
+  if (!inter || typeof inter !== 'object') return [];
+  if (inter.enabled === false) return [['互动', '这次没有采集（配置里关掉了）']];
+  const likes = Number(inter.likes?.count ?? 0) || 0;
+  const coinCount = Number(inter.coins?.count ?? 0) || 0;
+  const coinTotal = Number(inter.coins?.total ?? 0) || 0;
+  const favCount = Number(inter.favorites?.count ?? 0) || 0;
+  const favSource = inter.favorites?.source;
+  const liveCount = Number(inter.live?.count ?? 0) || 0;
+  const liveSec = Number(inter.live?.estimated_sec ?? 0) || 0;
+  const rows = [
+    ['点赞', likes + ' 个'],
+    ['投币', coinCount > 0 ? coinCount + ' 个视频 · ' + coinTotal + ' 枚' : '0 个'],
+    ['收藏', favCount + ' 个' + (favSource === 'relation' ? '（按看过的视频对照）' : '')],
+    ['观看直播', liveCount > 0 ? liveCount + ' 场 · 约 ' + humanDuration(liveSec) + '（按记录间隔估算，单场最多 30 分钟）' : '没有观看直播']
+  ];
+  return rows;
+}
+
 function factsRows(facts, shapeLabel = null) {
   const custom = typeof shapeLabel === 'string' ? shapeLabel.trim() : '';
   const rows = [
@@ -64,7 +85,14 @@ function factsRows(facts, shapeLabel = null) {
     ['同作者最长连续', `${facts.repetition.max_same_author_run} 条`],
     ['观看总时长', humanDuration(facts.duration.total_sec)]
   ];
-  return rows;
+  return rows.concat(interactionsRows(facts));
+}
+
+/** 互动口径的一句话说明，只在真的采集过时出现。 */
+function interactionsNote(facts) {
+  const inter = facts?.interactions;
+  if (!inter || typeof inter !== 'object' || inter.enabled === false) return '';
+  return '点赞与投币是"现在还在不在"的对照结果（接口不给动作时间）；直播按记录条数计场次，时长按相邻观看记录的时间间隔估算、单场最多 30 分钟，只作量级参考。';
 }
 
 /** 渲染 Markdown 报告。hypotheses（计划情况条目）可以为空，此时明说无法对照。 */
@@ -130,7 +158,8 @@ export function renderMarkdown(facts, { hypotheses = [], narrative = null, shape
     lines.push('');
   }
   lines.push('---');
-  lines.push('说明：接口不返回来源，本报告里的"观看状态"和"是不是自己点的"都是根据完成度与时长做的推断；报告不做评价、不给建议。');
+  const note = interactionsNote(facts);
+  lines.push('说明：接口不返回来源，本报告里的"观看状态"和"是不是自己点的"都是根据完成度与时长做的推断；报告不做评价、不给建议。' + note);
   return `${lines.join('\n')}\n`;
 }
 
@@ -187,7 +216,7 @@ ${signals ? `<h2>判断依据</h2><ul>${signals}</ul>` : ''}
 <h2>计划情况</h2>
 ${hyps ? `<ol>${hyps}</ol>` : `<p class="meta">${facts.intent_anchor ? '这次没有可对照的结论。' : '这次没有模型给出的完成情况，报告只列数字。'}</p>`}
 ${facts.intent_anchor ? `<h2>计划</h2><p>${escape(facts.intent_anchor.text)}</p><p class="meta">${escape(String(facts.intent_anchor.days_since_set ?? '?'))} 天前定的</p>` : ''}
-<footer>接口不返回来源，"观看状态"和"是不是自己点的"都是推断。本报告不做评价、不给建议。生成于 ${escape(formatLocal(now, timeZone))}</footer>
+<footer>接口不返回来源，"观看状态"和"是不是自己点的"都是推断。本报告不做评价、不给建议。${escape(interactionsNote(facts))}生成于 ${escape(formatLocal(now, timeZone))}</footer>
 </body></html>
 `;
 }
@@ -223,6 +252,18 @@ export function buildSummary(facts, { maxChars = 200, shapeLabel = null } = {}) 
     `平均完成度 ${pct(facts.completion_on_active.mean_completion_rate, 0)}`,
     `22 点后 ${pct(facts.time_distribution.after_22_share, 0)}`
   ];
+  const inter = facts?.interactions;
+  if (inter && typeof inter === 'object' && inter.enabled !== false) {
+    const likes = Number(inter.likes?.count ?? 0) || 0;
+    const coinCount = Number(inter.coins?.count ?? 0) || 0;
+    const coinTotal = Number(inter.coins?.total ?? 0) || 0;
+    const favCount = Number(inter.favorites?.count ?? 0) || 0;
+    const liveCount = Number(inter.live?.count ?? 0) || 0;
+    const liveSec = Number(inter.live?.estimated_sec ?? 0) || 0;
+    const bits = ['点赞 ' + likes, '投币 ' + coinCount + ' 个' + (coinTotal > coinCount ? '（' + coinTotal + ' 枚）' : ''), '收藏 ' + favCount];
+    if (liveCount > 0) bits.push('直播 ' + liveCount + ' 场约 ' + Math.max(1, Math.round(liveSec / 60)) + ' 分钟（估算）');
+    parts.push(bits.join('、'));
+  }
   return truncate(parts.join('，'), maxChars);
 }
 

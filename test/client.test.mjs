@@ -164,6 +164,7 @@ const SAMPLE_META = {
   overview: "这周的观看几乎都发生在深夜，且多数条目只看了开头几分钟。",
   shape_label: "深夜连刷推荐",
   shape_reason: "22 点后的条目多数只看了前几分钟",
+  interactions: { enabled: true, likes: 6, coins: 4, coin_total: 8, favorites: 2, live_minutes: 35, live_count: 2 },
   hypotheses: [
     { text: "深夜连续被动播放集中在两个游戏区 up 主。", clue: "22:40 起 7 条连播", evidence: [3, 5] }
   ],
@@ -217,7 +218,7 @@ test("统计事实卡片渲染关键数字与假设", async () => {
     t
   });
   const text = textOf(tree);
-  for (const expected of ["23", "深夜连刷推荐", "22 点后的条目多数只看了前几分钟", "31%", "48%", "7", "概览：这周的观看几乎都发生在深夜", "深夜连续被动播放", "证据 2"]) {
+  for (const expected of ["23", "深夜连刷推荐", "22 点后的条目多数只看了前几分钟", "31%", "48%", "7", "概览：这周的观看几乎都发生在深夜", "深夜连续被动播放", "证据 2", "点赞", "投币", "8 枚", "收藏", "35 分钟", "2 场"]) {
     assert.ok(text.includes(expected), "卡片应包含 " + expected + "，实际：" + text);
   }
   assert.ok(!text.includes("碎片化连刷"), "有模型起的名字时不该再显示规则标签");

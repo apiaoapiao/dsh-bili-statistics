@@ -19,6 +19,7 @@ It reads **your own** watch history from Bilibili's official API, computes a set
 
 - **Statistics** — item count, mean completion, share after 22:00, autoplay chains and a comparison against the last 14 runs; per day, week, month or custom range, with calendar or rolling windows
 - **Model notes** — the model names this period's viewing state (for example "late-night recommendation binge"), gives one line of evidence, a 150–350 word overview, and 1–3 plan-status items; every item has to mention a specific video title or author and cite at least 2 record indexes
+- **Interactions** — likes, coins (with the coin count) and favorites inside the window, plus how many live streams you watched and an estimate of the time spent there; favorites use the save time kept in the folders, likes and coins are checked against each video you watched
 - **Reports** — Markdown or a self-contained HTML file, filed automatically into `daily/`, `weekly/`, `monthly/` and `custom/`
 - **Notifications** — Bilibili DM and email, either or both; the tone comes from one editable prompt that both channels share
 - **Scheduling** — daily, weekly, monthly or custom, with the trigger time picked from dropdowns; it fetches history, writes the report and sends the digest by itself, no session needed
@@ -135,6 +136,12 @@ Reports go to `~/.dsh/bili-statistics/reports/` by default and are filed into a 
 
 Re-running the same window overwrites the same file (one file per day), while different windows never overwrite each other. The report directory can be changed in the settings page; click **Check directory** before saving — the host really creates the directory and writes a temporary probe file.
 
+How the interaction numbers are counted:
+
+- **Favorites** — every folder is paged through and each entry is placed by its save time; entries that are invalid (deleted or taken down) are skipped
+- **Likes / coins** — Bilibili exposes no list with action timestamps, so each video watched inside the window is checked for "is it liked / how many coins does it have right now". The number of videos checked is capped by `bili.interaction_max` (200 by default, prioritising favourites, then fully-watched videos, then the rest), so this is a "still there?" check and does not include likes on videos you never watched; a typical day of ~150 videos takes about a minute
+- **Live** — the number of streams is the number of live records; the history API does not return a per-session duration (`duration` and `progress` are always 0), so the time is estimated from the gap to the next record and capped at 30 minutes per session — a gap of several hours almost certainly is not real viewing time, so treat the total as an order of magnitude
+
 `state_dir` (default `~/.dsh/bili-statistics`) also holds:
 
 - `state.json` — the plan, every run, plan-status items, feedback and the trigger log
@@ -153,6 +160,8 @@ bili:
   page_size: 30           # the API caps this at 30
   request_interval_ms: 400
   max_pages: 40
+  interactions: true      # collect likes / coins / favorites / live
+  interaction_max: 200    # how many watched videos to check; higher = slower (~80s for 200)
 schedule:
   enabled: true
   mode: daily             # daily | weekly | monthly | custom
@@ -214,6 +223,7 @@ state_dir: ~/.dsh/bili-statistics
 - Model output depends on the host's `llm` service: with no provider/model selected, on timeout, or on error, the report keeps its numbers and notifications fall back to the template digest, with no error raised; when output is cut off by tokens you get a hint, and raising `max_tokens` fixes it
 - The email client is a minimal built-in SMTP implementation without OAuth2; Bilibili DMs are plain text and require different sender and receiver accounts
 - The web QR channel may be blocked by Bilibili's risk control (`-412`); the plugin then switches to the TV channel automatically
+- Likes and coins carry no timestamp, so they are checked as "still liked / still coined?" on the videos watched inside the window, bounded by `interaction_max` (favourites and fully-watched videos are checked first); live streams are counted from the records and their time is estimated from the gaps, capped at 30 minutes per session
 
 ## Implementation notes
 

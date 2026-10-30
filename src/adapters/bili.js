@@ -3,6 +3,9 @@ import { realSleep } from '../core/util.js';
 
 const HISTORY_URL = 'https://api.bilibili.com/x/web-interface/history/cursor';
 const NAV_URL = 'https://api.bilibili.com/x/web-interface/nav';
+const RELATION_URL = 'https://api.bilibili.com/x/web-interface/archive/relation';
+const FAV_FOLDERS_URL = 'https://api.bilibili.com/x/v3/fav/folder/created/list-all';
+const FAV_RESOURCE_URL = 'https://api.bilibili.com/x/v3/fav/resource/list';
 
 const DEFAULT_HEADERS = {
   Referer: 'https://www.bilibili.com/',
@@ -35,6 +38,8 @@ export function buildCookieHeader(bili = {}) {
 export function normalizeItem(raw) {
   const duration = Number(raw?.duration ?? 0);
   const progress = Number(raw?.progress ?? 0);
+  // 历史接口把 bvid 与 business 放在 history 子对象里，顶层没有这两个字段。
+  const nested = raw?.history && typeof raw.history === 'object' ? raw.history : {};
   let completion = null;
   if (duration > 0) {
     if (progress < 0) completion = 1;
@@ -46,8 +51,8 @@ export function normalizeItem(raw) {
     longTitle: String(raw?.long_title ?? '').trim(),
     author: String(raw?.author_name ?? '').trim(),
     authorMid: Number(raw?.author_mid ?? 0) || null,
-    bvid: typeof raw?.bvid === 'string' ? raw.bvid : null,
-    business: String(raw?.business ?? 'archive'),
+    bvid: typeof raw?.bvid === 'string' && raw.bvid.length > 0 ? raw.bvid : typeof nested.bvid === 'string' && nested.bvid.length > 0 ? nested.bvid : null,
+    business: String(raw?.business ?? nested.business ?? 'archive'),
     durationSec: duration > 0 ? duration : null,
     progressSec: progress < 0 ? duration : progress,
     completion,
@@ -167,6 +172,60 @@ export async function fetchHistory(options) {
   }
   items.sort((a, b) => a.ts - b.ts);
   return { items, pages };
+}
+
+/** 单个视频与当前登录账号的关系：是否点赞、投了几枚币、是否收藏。 */
+export async function fetchVideoRelation(bvid, options = {}) {
+  const { cookie, fetchImpl = globalThis.fetch, sleep = realSleep, intervalMs = 400, retries = 1, signal } = options;
+  const key = typeof bvid === 'string' ? bvid.trim() : '';
+  if (key.length === 0) return { bvid: null, like: false, coin: 0, favorite: false };
+  const url = new URL(RELATION_URL);
+  url.searchParams.set('bvid', key);
+  const data = await requestJson(url.toString(), { cookie, fetchImpl, sleep, intervalMs, retries, signal });
+  return {
+    bvid: key,
+    like: data?.like === true,
+    coin: Math.max(0, Number(data?.coin ?? 0) || 0),
+    favorite: data?.favorite === true
+  };
+}
+
+/** 收藏夹列表：只有元数据，没有创建时间，所以要知道"最近收藏了什么"还得逐夹翻分页。 */
+export async function fetchFavFolders(mid, options = {}) {
+  const { cookie, fetchImpl = globalThis.fetch, sleep = realSleep, intervalMs = 0, retries = 1, signal } = options;
+  const url = new URL(FAV_FOLDERS_URL);
+  url.searchParams.set('up_mid', String(mid));
+  const data = await requestJson(url.toString(), { cookie, fetchImpl, sleep, intervalMs, retries, signal });
+  const list = Array.isArray(data?.list) ? data.list : [];
+  return list
+    .map((folder) => ({
+      id: Number(folder?.id ?? 0) || 0,
+      title: String(folder?.title ?? '').trim(),
+      count: Number(folder?.media_count ?? 0) || 0
+    }))
+    .filter((folder) => folder.id > 0);
+}
+
+/** 单个收藏夹的一页：按收藏时间倒序，fav_time 是收藏动作的时间戳。 */
+export async function fetchFavPage(mediaId, page = 1, options = {}) {
+  const { cookie, fetchImpl = globalThis.fetch, sleep = realSleep, intervalMs = 0, retries = 1, signal } = options;
+  const url = new URL(FAV_RESOURCE_URL);
+  url.searchParams.set('media_id', String(mediaId));
+  url.searchParams.set('pn', String(Math.max(1, page)));
+  url.searchParams.set('ps', '20');
+  url.searchParams.set('platform', 'web');
+  const data = await requestJson(url.toString(), { cookie, fetchImpl, sleep, intervalMs, retries, signal });
+  const medias = Array.isArray(data?.medias) ? data.medias : [];
+  const items = medias.map((media) => ({
+    oid: Number(media?.id ?? 0) || null,
+    bvid: typeof media?.bvid === 'string' && media.bvid.length > 0 ? media.bvid : null,
+    title: String(media?.title ?? '').trim(),
+    author: String(media?.upper?.name ?? '').trim(),
+    favTime: Number(media?.fav_time ?? 0) || 0,
+    // attr 的 bit3 表示条目已失效（视频被删/下架），统计时跳过
+    invalid: (Number(media?.attr ?? 0) & 8) !== 0
+  }));
+  return { items, hasMore: data?.has_more === true };
 }
 
 /** 用 nav 接口探测当前 Cookie 对应的 uid。 */

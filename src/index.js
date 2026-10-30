@@ -48,10 +48,14 @@ export function apply(ctx, config) {
   /** 读历史的凭据：优先显式配置，其次扫码登录保存的 reader。 */
   function readerCredentials() {
     const fromConfig = buildCookieHeader(cfg.bili);
-    if (fromConfig.length > 0) return { cookie: fromConfig, source: 'config' };
     const creds = loadCreds(stateDir);
-    if (creds.reader && creds.reader.sessdata) return { cookie: cookieFrom(creds.reader), source: 'qr' };
-    return { cookie: '', source: null };
+    if (fromConfig.length > 0) {
+      return { cookie: fromConfig, source: 'config', mid: String(cfg.bili?.mid ?? '').trim() || null };
+    }
+    if (creds.reader && creds.reader.sessdata) {
+      return { cookie: cookieFrom(creds.reader), source: 'qr', mid: creds.reader.mid ?? null };
+    }
+    return { cookie: '', source: null, mid: null };
   }
 
   /**

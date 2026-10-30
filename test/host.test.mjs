@@ -28,11 +28,11 @@ function fixtureItems() {
     long_title: '第 ' + (index + 1) + ' 集',
     author_name: index < 3 ? '同一作者' : '作者 ' + index,
     author_mid: 100 + index,
-    bvid: 'BV' + String(index).padStart(10, '0'),
     view_at: nowSec - (plan.length - index) * 60,
     progress: entry.progress,
     duration: entry.duration,
-    business: 'archive'
+    // 真实接口把 bvid 与 business 放在 history 子对象里，外层没有这两个字段。
+    history: { bvid: 'BV' + String(index).padStart(10, '0'), business: 'archive' }
   }));
 }
 
@@ -89,7 +89,8 @@ const { sendBiliDm } = await import('../src/services/notify.js');
 
 function baseConfig(dir, overrides = {}) {
   return {
-    bili: { sessdata: 'FAKE_SESSDATA', request_interval_ms: 0 },
+    // 互动采集默认关掉：多数用例不关心点赞/投币/收藏，开着会多发几十次请求。
+    bili: { sessdata: 'FAKE_SESSDATA', request_interval_ms: 0, interactions: false },
     schedule: { enabled: false, mode: 'custom', timezone: zone, custom_from: YESTERDAY, custom_to: TODAY },
     report: { save_local: true, local_dir: path.join(dir, 'reports'), format: 'both', evidence_limit: 20 },
     notify: { channels: [], summary_max_chars: 200 },
@@ -1141,6 +1142,102 @@ test('邮件通知：SMTP 端到端发出摘要，可附 Markdown，失败不阻
 
   harness.disposers.forEach((fn) => fn());
   await smtp.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('互动统计：点赞投币按看过的视频对照，收藏按收藏夹时间，直播按时长推算', async () => {
+  const dir = path.join(here, '.tmp-interactions');
+  const items = fixtureItems();
+  // 最后一条换成直播记录：接口不给单场时长，只能按与下一条记录（这里是"现在"）的间隔推算。
+  items[items.length - 1] = {
+    ...items[items.length - 1],
+    title: '直播：影之刃零',
+    history: { bvid: null, business: 'live' },
+    duration: 0,
+    progress: 0
+  };
+  const pageCalls = { count: 0 };
+  const relationCalls = [];
+  const favPageCalls = [];
+  fetchHandler = async (url) => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname.endsWith('/x/web-interface/history/cursor')) {
+      pageCalls.count += 1;
+      const list = pageCalls.count === 1 ? items : [];
+      return { status: 200, ok: true, json: async () => ({ code: 0, message: '0', data: { list, cursor: { max: 0, view_at: 0, business: '' } } }) };
+    }
+    if (parsed.pathname.endsWith('/x/web-interface/archive/relation')) {
+      const bvid = String(parsed.searchParams.get('bvid') ?? '');
+      relationCalls.push(bvid);
+      const index = Number(bvid.slice(-2)) || 0;
+      return {
+        status: 200,
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: '0',
+          data: { like: index % 2 === 0, coin: index % 3 === 0 ? 2 : 0, favorite: false }
+        })
+      };
+    }
+    if (parsed.pathname.endsWith('/x/v3/fav/folder/created/list-all')) {
+      return {
+        status: 200,
+        ok: true,
+        json: async () => ({ code: 0, message: '0', data: { list: [{ id: 1838085180, title: '默认收藏夹', media_count: 3 }, { id: 0, title: '坏数据', media_count: 0 }] } })
+      };
+    }
+    if (parsed.pathname.endsWith('/x/v3/fav/resource/list')) {
+      favPageCalls.push(Number(parsed.searchParams.get('pn') ?? 1));
+      const inside = Math.floor(Date.now() / 1000) - 600;
+      return {
+        status: 200,
+        ok: true,
+        json: async () => ({
+          code: 0,
+          message: '0',
+          data: {
+            has_more: false,
+            info: { media_count: 3 },
+            medias: [
+              { id: 1, bvid: 'BV1111111111', title: '窗口内收藏', fav_time: inside, attr: 0, upper: { name: '作者甲' } },
+              { id: 2, bvid: 'BV2222222222', title: '很早以前收藏', fav_time: inside - 86400 * 30, attr: 0, upper: { name: '作者乙' } },
+              { id: 3, bvid: 'BV3333333333', title: '已失效条目', fav_time: inside, attr: 9, upper: { name: '作者丙' } }
+            ]
+          }
+        })
+      };
+    }
+    throw new Error('测试没有处理这个地址：' + parsed.pathname);
+  };
+  const harness = boot(dir, {
+    bili: { sessdata: 'FAKE_SESSDATA', mid: '1147205680', request_interval_ms: 0, interactions: true, interaction_max: 20 },
+    schedule: { enabled: false, mode: 'daily', window: 'rolling', timezone: zone }
+  });
+  await harness.call('bili_intent_facts', {});
+  const report = await harness.call('bili_intent_report', {});
+  const facts = report.run.facts;
+  assert.equal(facts.interactions.enabled, true);
+  assert.equal(facts.interactions.likes.count, 6, '偶数编号的视频算点赞');
+  assert.equal(facts.interactions.coins.count, 4, '每 3 条里有 1 条投币');
+  assert.equal(facts.interactions.coins.total, 8, '每条投 2 枚');
+  assert.equal(facts.interactions.favorites.count, 1, '只算窗口内、且未失效的收藏');
+  assert.equal(facts.interactions.favorites.source, 'folder');
+  assert.equal(facts.interactions.live.count, 1);
+  assert.ok(facts.interactions.live.estimated_sec > 0);
+  assert.ok(facts.interactions.live.estimated_sec <= 30 * 60, '单场最多按 30 分钟估算');
+  // 11 条有 bvid 的观看记录 + 1 条窗口内收藏但不在观看历史里的视频（BV1111111111）；直播没有 bvid，不查关系。
+  assert.equal(relationCalls.length, 12, '收藏的视频也要对照，直播不查关系');
+  assert.deepEqual(favPageCalls, [1]);
+  const markdown = fs.readFileSync(report.paths[0], 'utf8');
+  assert.match(markdown, /点赞/);
+  assert.match(markdown, /投币/);
+  assert.match(markdown, /收藏/);
+  assert.match(markdown, /观看直播/);
+  assert.match(markdown, /1 场/);
+  assert.match(report.summary, /点赞 6/);
+  assert.match(report.summary, /直播 1 场/);
+  harness.disposers.forEach((fn) => fn());
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

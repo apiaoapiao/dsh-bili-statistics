@@ -26,7 +26,7 @@ export const DEFAULT_DM_PROMPT = [
   '你是一个克制的个人助理，帮用户把当天的 B 站观看统计写成一条发给自己的私信。',
   '硬性要求：',
   '1. 语气平实、就事论事，像日程提醒，不说教、不鼓励、不批评，不用感叹号。',
-  '2. 只写输入里给出的数字，不推测未提供的信息，不做建议。',
+  '2. 只写输入里给出的数字，不推测未提供的信息，不做建议；输入里给了点赞、投币、收藏、直播这几个数字时，必须原样带上，不能省掉也不能改。',
   '3. 一句话或两句话，总长不超过 {max_chars} 字。',
   '4. 直接输出正文，不要称呼、不要"以下是"、不要代码围栏。',
   '5. 通篇用简体中文。'
@@ -286,6 +286,17 @@ export function buildReportRequest(config, { facts, evidence = [], hypotheses = 
   if (facts?.baseline && facts.baseline.lookback_runs > 0 && facts.baseline.delta_ratio !== null) {
     lines.push('与最近 ' + facts.baseline.lookback_runs + ' 次中位数（' + facts.baseline.median_items + ' 条）相比：' + (facts.baseline.delta_ratio >= 0 ? '高' : '低') + Math.abs(Math.round(facts.baseline.delta_ratio * 100)) + '%');
   }
+  if (facts?.interactions && facts.interactions.enabled !== false) {
+    const inter = facts.interactions;
+    const liveCount = Number(inter.live?.count ?? 0) || 0;
+    const bits = [
+      '点赞 ' + (Number(inter.likes?.count ?? 0) || 0) + ' 个',
+      '投币 ' + (Number(inter.coins?.count ?? 0) || 0) + ' 个视频共 ' + (Number(inter.coins?.total ?? 0) || 0) + ' 枚',
+      '收藏 ' + (Number(inter.favorites?.count ?? 0) || 0) + ' 个'
+    ];
+    if (liveCount > 0) bits.push('直播 ' + liveCount + ' 场，约 ' + Math.max(1, Math.round((Number(inter.live?.estimated_sec ?? 0) || 0) / 60)) + ' 分钟（按记录间隔估算，单场最多 30 分钟）');
+    lines.push('窗口内的互动：' + bits.join('、'));
+  }
   if (facts?.intent_anchor) {
     lines.push('用户定的计划（' + (facts.intent_anchor.days_since_set ?? '?') + ' 天前）：' + facts.intent_anchor.text);
   } else {
@@ -324,6 +335,9 @@ export function buildDmRequest(config, { facts, summary, maxChars = 200, shapeLa
     '统计事实：' + String(summary ?? ''),
     facts?.window?.label ? '窗口：' + facts.window.label : '',
     usedShape ? '观看状态：' + usedShape : '',
+    facts?.interactions && facts.interactions.enabled !== false
+      ? '互动：点赞 ' + (Number(facts.interactions.likes?.count ?? 0) || 0) + ' 个、投币 ' + (Number(facts.interactions.coins?.count ?? 0) || 0) + ' 个视频（' + (Number(facts.interactions.coins?.total ?? 0) || 0) + ' 枚）、收藏 ' + (Number(facts.interactions.favorites?.count ?? 0) || 0) + ' 个' + (Number(facts.interactions.live?.count ?? 0) > 0 ? '、直播 ' + (Number(facts.interactions.live?.count ?? 0) || 0) + ' 场约 ' + Math.max(1, Math.round((Number(facts.interactions.live?.estimated_sec ?? 0) || 0) / 60)) + ' 分钟（估算）' : '')
+      : '',
     facts?.baseline && facts.baseline.lookback_runs > 0 && facts.baseline.delta_ratio !== null
       ? '与最近 ' + facts.baseline.lookback_runs + ' 次中位数相比：' + (facts.baseline.delta_ratio >= 0 ? '高' : '低') + Math.abs(Math.round(facts.baseline.delta_ratio * 100)) + '%'
       : '',
